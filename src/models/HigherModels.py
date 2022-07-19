@@ -75,7 +75,7 @@ class Attention(nn.Module):
 
         epsilon = 1e-7
         att = torch.clamp(att, epsilon, 1. - epsilon)
-
+    
         norm_att = att / torch.sum(att, dim=2)[:, :, None]
         x = torch.sum(norm_att * cla, dim=2)
 
@@ -104,13 +104,11 @@ class MeanPooling(nn.Module):
     def forward(self, x):
         """input: (samples_num, freq_bins, time_steps, 1)
         """
-
         cla = self.cla(x)
         cla = self.activate(cla, self.cla_activation)
 
-        cla = cla[:, :, :, 0]   # (samples_num, classes_num, time_steps)
-
-        x = torch.mean(cla, dim=2)
+        # cla = cla[:, :, :, 0]   # (samples_num, classes_num, time_steps)
+        x = torch.mean(cla, dim=(2,3))
 
         return x, []
 
