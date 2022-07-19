@@ -12,4 +12,3 @@ wget==3.2
 zipp==3.4.1
 efficientnet-lite-pytorch==0.1.0
 efficientnet-pytorch==0.7.0
--e git+https://github.com/pytorch/fairseq@bcc81f6d5291c3996c8b2472282458dead46343f#egg=fairseq
