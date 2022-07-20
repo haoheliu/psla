@@ -18,7 +18,7 @@ att_head=4
 model=efficientnet
 psla=True
 eff_b=2
-batch_size=12
+batch_size=96
 
 if [ $psla == True ]
 then
@@ -39,12 +39,13 @@ lr=5e-4
 
 trpath=./datafiles/fsd50k_tr_full.json
 
-epoch=40
+epoch=60
 wa_start=21
-wa_end=40
+wa_end=60
 lrscheduler_start=10
 
-exp_dir=./exp/nerual_sampler-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
+exp_dir=./exp/nerual_sampler-0.1-score-loss-weightnorm-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
+# exp_dir=./exp/avgpooling-0.1-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
 mkdir -p $exp_dir
 
 CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./datafiles/fsd50k_val_full.json --data-eval ./datafiles/fsd50k_eval_full.json \
@@ -53,5 +54,5 @@ CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val .
 --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
 --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
 --dataset_mean -4.6476 --dataset_std 4.5699 --target_length 3000 --noise False \
---metrics mAP --warmup False --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--metrics mAP --warmup False --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.6 \
 --wa True --wa_start ${wa_start} --wa_end ${wa_end}

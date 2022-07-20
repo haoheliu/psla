@@ -102,12 +102,16 @@ class EffNetAttention(nn.Module):
         self.avgpool = nn.AvgPool2d((4, 1))
         #remove the original ImageNet classification layers to save space.
         self.effnet._fc = nn.Identity()
-        print("Use Neural Sampler with drop ratio of 0.75")
-        self.neural_sampler = NeuralSampler(input_dim=128, latent_dim=128, num_layers=2, drop_radio=0.75)
+        print("Use Neural Sampler with drop ratio of 0.1")
+        self.neural_sampler = NeuralSampler(input_dim=128, latent_dim=128, num_layers=2, drop_radio=0.1)
+        # self.pooling = nn.AvgPool2d((10, 1), stride=(10,1))
 
     def forward(self, x, nframes=1056):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
-        x = self.neural_sampler(x)
+        x, score_loss = self.neural_sampler(x)
+
+        # x = self.pooling(x); score_loss=torch.tensor([0.0]).cuda()
+
         x = x.unsqueeze(1)
         x = x.transpose(2, 3)
         
@@ -115,11 +119,12 @@ class EffNetAttention(nn.Module):
         x = self.avgpool(x) # torch.Size([10, 1280, 1, 4])
         x = x.transpose(2,3)
         out, norm_att = self.attention(x)
-        return out
+        return out, score_loss
 
 class NeuralSampler(nn.Module):
     def __init__(self, input_dim, latent_dim, num_layers=2, drop_radio=0.75):
         super(NeuralSampler, self).__init__()
+        # We can also predict the weight by NN
         self.feature_lstm = nn.LSTM(input_dim, latent_dim, num_layers, batch_first=True, bidirectional=False)
         self.score_lstm = nn.LSTM(latent_dim, latent_dim, num_layers, batch_first=True, bidirectional=False)
         self.score_linear = nn.Linear(latent_dim, 1)
@@ -127,13 +132,72 @@ class NeuralSampler(nn.Module):
     
     def forward(self, x):
         feature, (hn, cn) = self.feature_lstm(x)
-        score, (hn, cn) = self.score_lstm(feature)
+        score, (hn, cn) = self.score_lstm(feature, (hn, cn))
         score = torch.sigmoid(self.score_linear(score))
 
-        feature = self.select_feature(feature, score, total_length=int(x.size(1)*self.drop_radio))
-    
-        return feature
-    
+        # Range norm
+        # max_score, min_score = torch.max(score, dim=1, keepdim=True)[0], torch.min(score, dim=1, keepdim=True)[0]
+        # score = (score - min_score)/(max_score-min_score)
+
+        feature, score_loss = self.select_feature_fast(feature, score, total_length=int(x.size(1)*self.drop_radio))
+        return feature, score_loss
+
+    def select_feature_fast(self, feature, score, total_length):
+        # score.shape: torch.Size([10, 100, 1])
+        # feature.shape: torch.Size([10, 100, 256])
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        # print(score)
+        # print(torch.mean(torch.std(score, dim=1)))
+        # feature.size(): torch.Size([10, 100, 128])
+        # weight: torch.Size([10, 75, 100])
+        # score: torch.Size([10, 100, 1])
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        cumsum_weight = cumsum_weight * mask
+        weight = weight * mask
+        weight = self.weight_fake_softmax(weight, mask)
+        # for i in range(weight.size(0)):
+        #     weight[i] = self.update_element_weight(weight[i])
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        # weight = weight.permute(0, 2, 1)
+        return tensor_list, torch.mean(torch.std(score, dim=1))
+
+    def weight_fake_softmax(self, weight, mask):
+        alpha = torch.sum(weight, dim=1, keepdim=True)
+        return weight/(alpha+1e-8)
+
+    def update_element_weight(self, weight):
+        # weight: [T, newT]
+        i,j=0,0
+        _sum = 0
+        weight = weight.T
+        height, width = weight.size(0), weight.size(1)
+        while(i < height - 1 and j < width):
+            if(weight[i,j] == 0.0):
+                weight[i, j] = 1 - _sum
+                weight[i+1, j] -= weight[i, j]
+                _sum=0
+                i += 1
+            else:
+                _sum += weight[i,j]
+                j += 1
+        return weight.T
+
     def select_feature(self, feature, score, total_length):
         # score.shape: torch.Size([10, 100, 1])
         # feature.shape: torch.Size([10, 100, 256])
@@ -144,9 +208,12 @@ class NeuralSampler(nn.Module):
         max_val = torch.max(score, dim=1)[0]
         max_val = max_val[..., 0]
         dims_need_norm = max_val >= 1
-        if(torch.sum(dims_need_norm) >0 ):
+        if(torch.sum(dims_need_norm) > 0 ):
             score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm]
-
+        # print(score)
+        # print(torch.std(score, dim=1))
+        # feature.size(): torch.Size([10, 100, 128])
+        # weight: torch.Size([10, 75, 100])
         tensor_list = []
         for i in range(score.size(0)):
             sum=0    
@@ -193,5 +260,25 @@ def test_sampler():
     output =sampler(test_input)
     import ipdb; ipdb.set_trace()
 
+def test_select_feature():
+    # score.shape: torch.Size([10, 100, 1])
+    # feature.shape: torch.Size([10, 100, 256])
+    input_tdim = 100
+    sampler = NeuralSampler(input_dim=128, latent_dim=128)
+    feature = torch.tensor([[[ 0.1, 0.2, 0.3],
+         [0.4, 0.5, 0.6],
+         [-0.1, -0.2, -0.3],
+         [-0.4, -0.5, -0.6],
+         [ 1.1, 1.2, 1.3],
+         [-1.1, -1.2, -1.3]]])
+    score = torch.tensor([[[ 0.2],
+         [0.7],
+         [ 0.4],
+         [ 0.3],
+         [ 0.9],
+         [0.5]]])
+    res = sampler.select_feature_fast(feature, score, total_length=3)
+    import ipdb; ipdb.set_trace()
+
 if __name__ == '__main__':
-    test_model()
+    test_sampler()
