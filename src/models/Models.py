@@ -105,13 +105,16 @@ class EffNetAttention(nn.Module):
         print("Use Neural Sampler with drop ratio of 0.1")
         self.neural_sampler = NeuralSampler(input_dim=128, latent_dim=128, num_layers=2, drop_radio=0.1)
         # self.pooling = nn.AvgPool2d((10, 1), stride=(10,1))
+        self.batch_idx=0
 
     def forward(self, x, nframes=1056):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
-        x, score_loss = self.neural_sampler(x)
+        self.batch_idx += 1
+        y, score, score_loss = self.neural_sampler(x)
         # x = self.pooling(x); score_loss=torch.tensor([0.0]).cuda()
-
-        x = x.unsqueeze(1)
+        if(self.batch_idx % 300 == 0):
+            self.neural_sampler.visualize(x,y, score)
+        x = y.unsqueeze(1)
         x = x.transpose(2, 3)
         
         x = self.effnet.extract_features(x) # torch.Size([10, 1280, 4, 4])
@@ -136,8 +139,27 @@ class NeuralSampler(nn.Module):
         # Range norm
         # max_score, min_score = torch.max(score, dim=1, keepdim=True)[0], torch.min(score, dim=1, keepdim=True)[0]
         # score = (score - min_score)/(max_score-min_score)
-        feature, score_loss = self.select_feature_fast(feature, score, total_length=int(x.size(1)*self.drop_radio))
-        return feature, score_loss
+
+        # Weighting internal feature
+        # feature, score_loss = self.select_feature_fast(feature, score, total_length=int(x.size(1)*self.drop_radio))
+        # Weighting the input spectrogram
+        feature, score_loss = self.select_feature_fast(x, score, total_length=int(x.size(1)*self.drop_radio))
+        
+        return feature, score, score_loss
+
+    def visualize(self, x, y, score):
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            plt.figure(figsize=(6, 8))
+            plt.subplot(311)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(312)
+            plt.imshow(x[i,...].detach().cpu().numpy(), aspect="auto")
+            plt.subplot(313)
+            plt.imshow(y[i,...].detach().cpu().numpy(), aspect="auto")
+            plt.savefig("%s.png" % i)
+            plt.close()
+        # import ipdb; ipdb.set_trace()
 
     def select_feature_fast(self, feature, score, total_length):
         # score.shape: torch.Size([10, 100, 1])
@@ -146,13 +168,13 @@ class NeuralSampler(nn.Module):
         # Normalize the sum of score to the total length
         score = (score / sum_score) * total_length
         # If the original total legnth is smaller, we need to normalize the value greater than 1.  
-        max_val = torch.max(score, dim=1)[0]
-        max_val = max_val[..., 0]
-        dims_need_norm = max_val >= 1
-        if(torch.sum(dims_need_norm) > 0):
-            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
-        # print(score)
-        # print(torch.mean(torch.std(score, dim=1)))
+
+        # max_val = torch.max(score, dim=1)[0]
+        # max_val = max_val[..., 0]
+        # dims_need_norm = max_val >= 1
+        # if(torch.sum(dims_need_norm) > 0):
+        #     score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+
         # feature.size(): torch.Size([10, 100, 128])
         # weight: torch.Size([10, 75, 100])
         # score: torch.Size([10, 100, 1])
@@ -172,9 +194,7 @@ class NeuralSampler(nn.Module):
         #     weight[i] = self.update_element_weight(weight[i])
         tensor_list = torch.matmul(weight.permute(0,2,1), feature)
         # TODO We might need normalizations
-
-        # weight = weight.permute(0, 2, 1)
-        score_loss = torch.mean(torch.std(score, dim=1)) 
+        score_loss = torch.mean(torch.std(score, dim=1))
         return tensor_list, score_loss
 
     def weight_fake_softmax(self, weight, mask):
