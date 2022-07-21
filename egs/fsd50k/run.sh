@@ -44,7 +44,7 @@ wa_start=21
 wa_end=60
 lrscheduler_start=10
 
-exp_dir=./exp/nerual_sampler-0.1-weightnorm-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
+exp_dir=./exp/nerual_sampler-0.1-weightnorm-feature-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
 # exp_dir=./exp/nerual_sampler-0.1-score-loss-v2-weightnorm-efficientnet-2-5e-4-fsd50k-impretrain-True-fm48-tm192-mix0.5-bal-True-b96-le-2
 mkdir -p $exp_dir
 
