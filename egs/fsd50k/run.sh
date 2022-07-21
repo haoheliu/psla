@@ -44,8 +44,8 @@ wa_start=21
 wa_end=60
 lrscheduler_start=10
 
-exp_dir=./exp/nerual_sampler-0.1-score-loss-weightnorm-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
-# exp_dir=./exp/avgpooling-0.1-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
+exp_dir=./exp/nerual_sampler-0.1-weightnorm-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
+# exp_dir=./exp/nerual_sampler-0.1-score-loss-v2-weightnorm-efficientnet-2-5e-4-fsd50k-impretrain-True-fm48-tm192-mix0.5-bal-True-b96-le-2
 mkdir -p $exp_dir
 
 CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./datafiles/fsd50k_val_full.json --data-eval ./datafiles/fsd50k_eval_full.json \

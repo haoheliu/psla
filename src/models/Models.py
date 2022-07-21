@@ -109,7 +109,6 @@ class EffNetAttention(nn.Module):
     def forward(self, x, nframes=1056):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
         x, score_loss = self.neural_sampler(x)
-
         # x = self.pooling(x); score_loss=torch.tensor([0.0]).cuda()
 
         x = x.unsqueeze(1)
@@ -134,11 +133,9 @@ class NeuralSampler(nn.Module):
         feature, (hn, cn) = self.feature_lstm(x)
         score, (hn, cn) = self.score_lstm(feature, (hn, cn))
         score = torch.sigmoid(self.score_linear(score))
-
         # Range norm
         # max_score, min_score = torch.max(score, dim=1, keepdim=True)[0], torch.min(score, dim=1, keepdim=True)[0]
         # score = (score - min_score)/(max_score-min_score)
-
         feature, score_loss = self.select_feature_fast(feature, score, total_length=int(x.size(1)*self.drop_radio))
         return feature, score_loss
 
@@ -174,8 +171,11 @@ class NeuralSampler(nn.Module):
         # for i in range(weight.size(0)):
         #     weight[i] = self.update_element_weight(weight[i])
         tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        # TODO We might need normalizations
+
         # weight = weight.permute(0, 2, 1)
-        return tensor_list, torch.mean(torch.std(score, dim=1))
+        score_loss = torch.mean(torch.std(score, dim=1)) 
+        return tensor_list, score_loss
 
     def weight_fake_softmax(self, weight, mask):
         alpha = torch.sum(weight, dim=1, keepdim=True)

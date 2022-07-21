@@ -16,3 +16,5 @@ fig/*
 *.mp4
 exp
 fairseq
+*.pyc
+*.png

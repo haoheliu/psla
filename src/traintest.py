@@ -110,12 +110,12 @@ def train(audio_model, train_loader, test_loader, args):
 
             if isinstance(loss_fn, torch.nn.CrossEntropyLoss):
                 loss1 = loss_fn(audio_output, torch.argmax(labels.long(), axis=1))
-                loss = loss1 - score_loss
+                loss = loss1 #  - score_loss
             else:
                 epsilon = 1e-7
                 audio_output = torch.clamp(audio_output, epsilon, 1. - epsilon)
                 loss1 = loss_fn(audio_output, labels)
-                loss = loss1 - score_loss
+                loss = loss1 # - score_loss
             
             # optimization if amp is not used
             optimizer.zero_grad()
