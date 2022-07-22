@@ -103,7 +103,7 @@ class EffNetAttention(nn.Module):
         #remove the original ImageNet classification layers to save space.
         self.effnet._fc = nn.Identity()
         print("Use Neural Sampler with drop ratio of 0.1")
-        self.neural_sampler = NeuralSampler(input_dim=128, latent_dim=128, num_layers=2, drop_radio=0.1)
+        self.neural_sampler = NeuralSampler(input_dim=128, latent_dim=64, num_layers=2, drop_radio=0.1)
         # self.pooling = nn.AvgPool2d((10, 1), stride=(10,1))
         self.batch_idx=0
 
@@ -111,9 +111,9 @@ class EffNetAttention(nn.Module):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
         self.batch_idx += 1
         y, score, score_loss = self.neural_sampler(x)
-        # x = self.pooling(x); score_loss=torch.tensor([0.0]).cuda()
         if(self.batch_idx % 300 == 0):
             self.neural_sampler.visualize(x,y, score)
+        # y = self.pooling(x); score_loss=torch.tensor([0.0]).cuda()
         x = y.unsqueeze(1)
         x = x.transpose(2, 3)
         
@@ -127,24 +127,17 @@ class NeuralSampler(nn.Module):
     def __init__(self, input_dim, latent_dim, num_layers=2, drop_radio=0.75):
         super(NeuralSampler, self).__init__()
         # We can also predict the weight by NN
-        self.feature_lstm = nn.LSTM(input_dim, latent_dim, num_layers, batch_first=True, bidirectional=False)
-        self.score_lstm = nn.LSTM(latent_dim, latent_dim, num_layers, batch_first=True, bidirectional=False)
-        self.score_linear = nn.Linear(latent_dim, 1)
+        self.feature_lstm = nn.LSTM(input_dim, latent_dim, num_layers, batch_first=True, bidirectional=True)
+        # self.score_lstm = nn.LSTM(latent_dim, latent_dim, num_layers, batch_first=True, bidirectional=False)
+        self.score_linear = nn.Linear(latent_dim*2, 1)
         self.drop_radio = drop_radio
     
     def forward(self, x):
-        feature, (hn, cn) = self.feature_lstm(x)
-        score, (hn, cn) = self.score_lstm(feature, (hn, cn))
+        score, (hn, cn) = self.feature_lstm(x)
+        # score, (hn, cn) = self.score_lstm(feature, (hn, cn))
         score = torch.sigmoid(self.score_linear(score))
-        # Range norm
-        # max_score, min_score = torch.max(score, dim=1, keepdim=True)[0], torch.min(score, dim=1, keepdim=True)[0]
-        # score = (score - min_score)/(max_score-min_score)
-
-        # Weighting internal feature
-        # feature, score_loss = self.select_feature_fast(feature, score, total_length=int(x.size(1)*self.drop_radio))
         # Weighting the input spectrogram
         feature, score_loss = self.select_feature_fast(x, score, total_length=int(x.size(1)*self.drop_radio))
-        
         return feature, score, score_loss
 
     def visualize(self, x, y, score):
@@ -159,7 +152,6 @@ class NeuralSampler(nn.Module):
             plt.imshow(y[i,...].detach().cpu().numpy(), aspect="auto")
             plt.savefig("%s.png" % i)
             plt.close()
-        # import ipdb; ipdb.set_trace()
 
     def select_feature_fast(self, feature, score, total_length):
         # score.shape: torch.Size([10, 100, 1])
@@ -169,31 +161,25 @@ class NeuralSampler(nn.Module):
         score = (score / sum_score) * total_length
         # If the original total legnth is smaller, we need to normalize the value greater than 1.  
 
-        # max_val = torch.max(score, dim=1)[0]
-        # max_val = max_val[..., 0]
-        # dims_need_norm = max_val >= 1
-        # if(torch.sum(dims_need_norm) > 0):
-        #     score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
-
         # feature.size(): torch.Size([10, 100, 128])
         # weight: torch.Size([10, 75, 100])
         # score: torch.Size([10, 100, 1])
         cumsum_score = torch.cumsum(score, dim=1)
         cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
-        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        # cumsum_weight = cumsum_weight - (score/2)
 
         threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
         smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
         greater_mask = cumsum_weight > threshold[None, None, ...]
         mask = torch.logical_and(smaller_mask, greater_mask)
 
-        cumsum_weight = cumsum_weight * mask
+        # cumsum_weight = cumsum_weight * mask
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
         weight = weight * mask
         weight = self.weight_fake_softmax(weight, mask)
         # for i in range(weight.size(0)):
         #     weight[i] = self.update_element_weight(weight[i])
         tensor_list = torch.matmul(weight.permute(0,2,1), feature)
-        # TODO We might need normalizations
         score_loss = torch.mean(torch.std(score, dim=1))
         return tensor_list, score_loss
 
@@ -217,49 +203,6 @@ class NeuralSampler(nn.Module):
                 _sum += weight[i,j]
                 j += 1
         return weight.T
-
-    def select_feature(self, feature, score, total_length):
-        # score.shape: torch.Size([10, 100, 1])
-        # feature.shape: torch.Size([10, 100, 256])
-        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
-        # Normalize the sum of score to the total length
-        score = (score / sum_score) * total_length
-        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
-        max_val = torch.max(score, dim=1)[0]
-        max_val = max_val[..., 0]
-        dims_need_norm = max_val >= 1
-        if(torch.sum(dims_need_norm) > 0 ):
-            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm]
-        # print(score)
-        # print(torch.std(score, dim=1))
-        # feature.size(): torch.Size([10, 100, 128])
-        # weight: torch.Size([10, 75, 100])
-        tensor_list = []
-        for i in range(score.size(0)):
-            sum=0    
-            current=0
-            total_score = 0
-            tensor = feature[i].clone()
-            tensor *= 0.0
-
-            while current < score.size(1):
-                val_score = score[i, current, 0]
-                if(val_score + total_score >= 1):
-                    # Add a tensor element
-                    score[i, current, 0] = score[i, current, 0]-(1-total_score)
-                    val_score = (1-total_score)
-                    total_score = 0
-
-                    sum += val_score
-                    tensor[int(sum)] += val_score * feature[i][current]
-                else:
-                    sum += val_score
-                    tensor[int(sum)] += val_score * feature[i][current]
-
-                    current += 1
-            tensor_list.append(tensor.unsqueeze(0))
-        tensor_list = torch.cat(tensor_list, dim=0)
-        return tensor_list[:,:total_length,:] # TODO need scrutinize
 
 def test_model():
     input_tdim = 100
@@ -300,5 +243,31 @@ def test_select_feature():
     res = sampler.select_feature_fast(feature, score, total_length=3)
     import ipdb; ipdb.set_trace()
 
+def test_pos_emb_1d():
+    import torch
+    from positional_encodings.torch_encodings import PositionalEncoding1D, PositionalEncoding2D, PositionalEncoding3D, Summer
+    import matplotlib.pyplot as plt
+    
+    p_enc_1d = PositionalEncoding1D(1)
+    y = torch.zeros((1,300,1))
+    x = torch.zeros((1,128,1))
+    pos_emb_y = p_enc_1d(y) # (1, 6, 2, 8)
+    pos_emb_x = p_enc_1d(x) # (1, 6, 2, 8)
+    pos_emb_y = pos_emb_y.expand(1, 300, 128)
+    pos_emb_y = pos_emb_y + pos_emb_x.permute(0,2,1)
+    plt.imshow(pos_emb_y[0].numpy(), aspect="auto")
+    plt.savefig("temp.png")
+    import ipdb; ipdb.set_trace()
+
 if __name__ == '__main__':
-    test_sampler()
+    # test_sampler()
+    import torch
+    from positional_encodings.torch_encodings import PositionalEncoding1D, PositionalEncoding2D, PositionalEncoding3D, Summer
+    import matplotlib.pyplot as plt
+    
+    p_enc_1d = PositionalEncoding2D(1)
+    y = torch.zeros((1,300,128,1))
+    pos_emb_y = p_enc_1d(y) # (1, 6, 2, 8)
+    plt.imshow(pos_emb_y[0,:,:,0].numpy(), aspect="auto")
+    plt.savefig("temp.png")
+    import ipdb; ipdb.set_trace()
