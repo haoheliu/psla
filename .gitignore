@@ -18,3 +18,4 @@ exp
 fairseq
 *.pyc
 *.png
+audioset*
