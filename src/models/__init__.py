@@ -6,4 +6,7 @@
 # @File    : __init__.py.py
 
 from .HigherModels import *
+from .neural_sampler import *
+from .pooling import *
+from .specpool2d import *
 from .Models import *

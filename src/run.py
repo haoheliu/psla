@@ -13,12 +13,14 @@ sys.path.append(basepath)
 import dataloaders
 from utilities import *
 import models
+from models.neural_sampler import *
 from traintest import train, validate
 import ast
 from torch.utils.data import WeightedRandomSampler
 import numpy as np
+import logging
 
-print("I am process %s, running on %s: starting (%s)" % (
+logging.info("I am process %s, running on %s: starting (%s)" % (
         os.getpid(), os.uname()[1], time.asctime()))
 
 # I/O args
@@ -69,6 +71,9 @@ parser.add_argument("--lr_patience", type=int, default=2, help="how many epoch t
 parser.add_argument("--att_head", type=int, default=4, help="number of attention heads")
 parser.add_argument('--bal', help='if use balance sampling', type=ast.literal_eval)
 
+parser.add_argument("--sampler", type=str, default="NeuralSampler")
+parser.add_argument("--preserve_ratio", type=float, default=0.1)
+
 args = parser.parse_args()
 
 audio_conf = {'num_mel_bins': 128, 'target_length': args.target_length, 'freqm': args.freqm,
@@ -80,7 +85,7 @@ val_audio_conf = {'num_mel_bins': 128, 'target_length': args.target_length, 'fre
                   'std': args.dataset_std, 'noise': False}
 
 if args.bal == True:
-    print('balanced sampler is being used')
+    logging.info('balanced sampler is being used')
     samples_weight = np.loadtxt(args.data_train[:-5] + '_weight.csv', delimiter=',')
     sampler = WeightedRandomSampler(samples_weight, len(samples_weight), replacement=True)
 
@@ -88,7 +93,7 @@ if args.bal == True:
         dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf),
         batch_size=args.batch_size, sampler=sampler, num_workers=args.num_workers, pin_memory=False)
 else:
-    print('balanced sampler is not used')
+    logging.info('balanced sampler is not used')
     train_loader = torch.utils.data.DataLoader(
         dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf),
         batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=False)
@@ -103,7 +108,7 @@ if args.data_eval != None:
         batch_size=args.batch_size*2, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
 if args.model == 'efficientnet':
-    audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head)
+    audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio)
 elif args.model == 'resnet':
     audio_model = models.ResNetAttention(label_dim=args.n_class, pretrain=args.impretrain)
 elif args.model == 'mbnet':
@@ -117,21 +122,34 @@ elif args.model == 'mbnet':
 # audio_model.load_state_dict(sd, strict=False)
 
 if not bool(args.exp_dir):
-    print("exp_dir not specified, automatically naming one...")
+    logging.info("exp_dir not specified, automatically naming one...")
     args.exp_dir = "exp/Data-%s/AudioModel-%s_Optim-%s_LR-%s_Epochs-%s" % (
         os.path.basename(args.data_train), args.model, args.optim,
         args.lr, args.n_epochs)
 
-print("\nCreating experiment directory: %s" % args.exp_dir)
+logging.info("\nCreating experiment directory: %s" % args.exp_dir)
 if os.path.exists("%s/models" % args.exp_dir) == False:
     os.makedirs("%s/models" % args.exp_dir)
 with open("%s/args.pkl" % args.exp_dir, "wb") as f:
     pickle.dump(args, f)
 
+# Remove all handlers associated with the root logger object.
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+logging.basicConfig(
+    filename="%s/log.txt" % args.exp_dir,
+    filemode="a",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s: %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
+
+logging.info("Initializing...")
 train(audio_model, train_loader, val_loader, args)
 
 # if the dataset has a seperate evaluation set (e.g., FSD50K), then select the model using the validation set and eval on the evaluation set.
-print('---------------Result Summary---------------')
+logging.info('---------------Result Summary---------------')
 if args.data_eval != None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -140,46 +158,46 @@ if args.data_eval != None:
     if not isinstance(audio_model, nn.DataParallel):
         audio_model = nn.DataParallel(audio_model)
     audio_model.load_state_dict(sd)
-    print('---------------evaluate best single model on the validation set---------------')
+    logging.info('---------------evaluate best single model on the validation set---------------')
     stats, _ = validate(audio_model, val_loader, args, 'best_single_valid_set')
     val_mAP = np.mean([stat['AP'] for stat in stats])
     val_mAUC = np.mean([stat['auc'] for stat in stats])
-    print("mAP: {:.6f}".format(val_mAP))
-    print("AUC: {:.6f}".format(val_mAUC))
-    print('---------------evaluate best single model on the evaluation set---------------')
+    logging.info("mAP: {:.6f}".format(val_mAP))
+    logging.info("AUC: {:.6f}".format(val_mAUC))
+    logging.info('---------------evaluate best single model on the evaluation set---------------')
     stats, _ = validate(audio_model, eval_loader, args, 'best_single_eval_set', eval_target=True)
     eval_mAP = np.mean([stat['AP'] for stat in stats])
     eval_mAUC = np.mean([stat['auc'] for stat in stats])
-    print("mAP: {:.6f}".format(eval_mAP))
-    print("AUC: {:.6f}".format(eval_mAUC))
+    logging.info("mAP: {:.6f}".format(eval_mAP))
+    logging.info("AUC: {:.6f}".format(eval_mAUC))
     np.savetxt(args.exp_dir + '/best_single_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC])
 
     # evaluate weight average model
     sd = torch.load(args.exp_dir + '/models/audio_model_wa.pth', map_location=device)
     audio_model.load_state_dict(sd)
-    print('---------------evaluate weight average model on the validation set---------------')
+    logging.info('---------------evaluate weight average model on the validation set---------------')
     stats, _ = validate(audio_model, val_loader, args, 'wa_valid_set')
     val_mAP = np.mean([stat['AP'] for stat in stats])
     val_mAUC = np.mean([stat['auc'] for stat in stats])
-    print("mAP: {:.6f}".format(val_mAP))
-    print("AUC: {:.6f}".format(val_mAUC))
-    print('---------------evaluate weight averages model on the evaluation set---------------')
+    logging.info("mAP: {:.6f}".format(val_mAP))
+    logging.info("AUC: {:.6f}".format(val_mAUC))
+    logging.info('---------------evaluate weight averages model on the evaluation set---------------')
     stats, _ = validate(audio_model, eval_loader, args, 'wa_eval_set')
     eval_mAP = np.mean([stat['AP'] for stat in stats])
     eval_mAUC = np.mean([stat['auc'] for stat in stats])
-    print("mAP: {:.6f}".format(eval_mAP))
-    print("AUC: {:.6f}".format(eval_mAUC))
+    logging.info("mAP: {:.6f}".format(eval_mAP))
+    logging.info("AUC: {:.6f}".format(eval_mAUC))
     np.savetxt(args.exp_dir + '/wa_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC])
 
     # evaluate the ensemble results
-    print('---------------evaluate ensemble model on the validation set---------------')
+    logging.info('---------------evaluate ensemble model on the validation set---------------')
     # this is already done in the training process, only need to load
     result = np.loadtxt(args.exp_dir + '/result.csv', delimiter=',')
     val_mAP = result[-1, -3]
     val_mAUC = result[-1, -2]
-    print("mAP: {:.6f}".format(val_mAP))
-    print("AUC: {:.6f}".format(val_mAUC))
-    print('---------------evaluate ensemble model on the evaluation set---------------')
+    logging.info("mAP: {:.6f}".format(val_mAP))
+    logging.info("AUC: {:.6f}".format(val_mAUC))
+    logging.info('---------------evaluate ensemble model on the evaluation set---------------')
     # get the prediction of each checkpoint model
     for epoch in range(1, args.n_epochs+1):
         sd = torch.load(args.exp_dir + '/models/audio_model.' + str(epoch) + '.pth', map_location=device)
@@ -195,39 +213,39 @@ if args.data_eval != None:
     stats = calculate_stats(ensemble_predictions, target)
     eval_mAP = np.mean([stat['AP'] for stat in stats])
     eval_mAUC = np.mean([stat['auc'] for stat in stats])
-    print("mAP: {:.6f}".format(eval_mAP))
-    print("AUC: {:.6f}".format(eval_mAUC))
+    logging.info("mAP: {:.6f}".format(eval_mAP))
+    logging.info("AUC: {:.6f}".format(eval_mAUC))
     np.savetxt(args.exp_dir + '/ensemble_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC])
 
 # if the dataset only has evaluation set (no validation set), e.g., AudioSet
 else:
     # evaluate single model
-    print('---------------evaluate best single model on the evaluation set---------------')
+    logging.info('---------------evaluate best single model on the evaluation set---------------')
     # result is the performance of each epoch, we average the results of the last 5 epochs
     result = np.loadtxt(args.exp_dir + '/result.csv', delimiter=',')
     last_five_epoch_mean = np.mean(result[-5: , :], axis=0)
     eval_mAP = last_five_epoch_mean[0]
     eval_mAUC = last_five_epoch_mean[1]
-    print("mAP: {:.6f}".format(eval_mAP))
-    print("AUC: {:.6f}".format(eval_mAUC))
+    logging.info("mAP: {:.6f}".format(eval_mAP))
+    logging.info("AUC: {:.6f}".format(eval_mAUC))
     np.savetxt(args.exp_dir + '/best_single_result.csv', [eval_mAP, eval_mAUC])
 
     # evaluate weight average model
-    print('---------------evaluate weight average model on the evaluation set---------------')
+    logging.info('---------------evaluate weight average model on the evaluation set---------------')
     # already done in training process, only need to load
     result = np.loadtxt(args.exp_dir + '/wa_result.csv', delimiter=',')
     wa_mAP = result[0]
     wa_mAUC = result[1]
-    print("mAP: {:.6f}".format(wa_mAP))
-    print("AUC: {:.6f}".format(wa_mAUC))
+    logging.info("mAP: {:.6f}".format(wa_mAP))
+    logging.info("AUC: {:.6f}".format(wa_mAUC))
     np.savetxt(args.exp_dir + '/wa_result.csv', [wa_mAP, wa_mAUC])
 
     # evaluate ensemble
-    print('---------------evaluate ensemble model on the evaluation set---------------')
+    logging.info('---------------evaluate ensemble model on the evaluation set---------------')
     # already done in training process, only need to load
     result = np.loadtxt(args.exp_dir + '/result.csv', delimiter=',')
     ensemble_mAP = result[-1, -3]
     ensemble_mAUC = result[-1, -2]
-    print("mAP: {:.6f}".format(ensemble_mAP))
-    print("AUC: {:.6f}".format(ensemble_mAUC))
+    logging.info("mAP: {:.6f}".format(ensemble_mAP))
+    logging.info("AUC: {:.6f}".format(ensemble_mAUC))
     np.savetxt(args.exp_dir + '/ensemble_result.csv', [ensemble_mAP, ensemble_mAUC])

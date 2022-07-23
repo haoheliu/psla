@@ -11,11 +11,10 @@ def load_pickle(fname):
         res = pickle.load(f)
     return res
 
-
 import os
 import numpy as np
 
-PATH = "/media/Disk_HDD/haoheliu/projects/psla/egs/fsd50k/exp/nerual_sampler-0.1-weightnorm-efficientnet-2-5e-4-fsd50k-impretrain-True-fm48-tm192-mix0.5-bal-True-b96-le-2"
+PATH = "/media/Disk_HDD/haoheliu/projects/psla/egs/fsd50k/exp/nerual_sampler-0.25-weightnorm-feature-efficientnet-2-5e-4-fsd50k-impretrain-True-fm48-tm192-mix0.5-bal-True-b48-le-2"
 for file in os.listdir(PATH):
     if("pickle" in file):
         stats = load_pickle(os.path.join(PATH, file))
