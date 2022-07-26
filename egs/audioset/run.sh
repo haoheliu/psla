@@ -18,8 +18,7 @@ att_head=4
 model=efficientnet
 psla=True
 eff_b=2
-date=$(date '+%Y-%m-%d')
-batch_size=32
+date=$(date '+%Y-%m-%d-%H-%M')
 
 if [ $psla == True ]
 then
@@ -36,9 +35,6 @@ else
   full_bal=False
 fi
 
-sampler=NoAction # NeuralSamplerAvgPool # NoAction
-preserve_ratio=0.1
-
 if [ $subset == balanced ]
 then
   bal=False
@@ -48,9 +44,9 @@ then
   trpath=/media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_bal_train_data.json
   # original set
   #trpath=./datafiles/balanced_train_data.json
-  epoch=75
+  epoch=100
   wa_start=41
-  wa_end=75
+  wa_end=100
   lrscheduler_start=35
 else
   bal=${full_bal}
@@ -64,24 +60,31 @@ else
   lrscheduler_start=10
 fi
 
-echo $sampler
-exp_dir=./exp/${date}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git
-mkdir -p $exp_dir
+# echo $sampler
+# exp_dir=./exp/${date}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git
+# mkdir -p $exp_dir
 
-CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
---exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv \
---n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
---model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
---freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
---dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
---metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
---wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} 
+# CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
+# --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv \
+# --n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+# --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+# --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+# --dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+# --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+# --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} 
 
+preserve_ratio=0.1
 batch_size=96
-for sampler in NeuralSamplerAvgMaxPool NeuralSampler_NNLSTM NeuralSamplerAvgPool NeuralSamplerNoFakeSoftmax NeuralSamplerPosEmb NeuralSamplerPosEmbLearnable NeuralSamplerPosEmbSumLearnable NeuralSamplerPosEmbSum NeuralSamplerMiddle NeuralSampler
+
+#############################
+  # freqm=0
+  # timem=0
+#############################
+
+for sampler in NeuralSamplerPosEmbLearnableLargeEnergyNN NeuralSamplerPosEmbLearnableLargeEnergy NeuralSamplerAvgPool NeuralSamplerPosEmbLearnableLargeEnergyNN NeuralSamplerPosEmbLearnableLargeEnergy NeuralSamplerAvgPool
 do
 echo $sampler
-exp_dir=./exp/${date}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git
+exp_dir=./exp/${date}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
 mkdir -p $exp_dir
 
 CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
@@ -91,6 +94,6 @@ CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /
 --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
 --dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
 --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
---wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} 
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10
 # echo $sampler
 done

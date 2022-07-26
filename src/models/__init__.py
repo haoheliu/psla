@@ -8,5 +8,4 @@
 from .HigherModels import *
 from .neural_sampler import *
 from .pooling import *
-from .specpool2d import *
 from .Models import *

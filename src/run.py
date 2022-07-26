@@ -73,6 +73,8 @@ parser.add_argument('--bal', help='if use balance sampling', type=ast.literal_ev
 
 parser.add_argument("--sampler", type=str, default="NeuralSampler")
 parser.add_argument("--preserve_ratio", type=float, default=0.1)
+parser.add_argument("--val_interval", type=int, default=1)
+parser.add_argument("--score_loss", type=bool, default=False)
 
 args = parser.parse_args()
 

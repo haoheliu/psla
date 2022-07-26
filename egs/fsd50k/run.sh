@@ -13,7 +13,7 @@
 # set -x
 conda activate psla
 export TORCH_HOME=./
-date=$(date '+%Y-%m-%d')
+date=$(date '+%Y-%m-%d-%H-%M')
 att_head=4
 model=efficientnet
 psla=True
@@ -50,7 +50,7 @@ lr=5e-4
 
 trpath=./datafiles/fsd50k_tr_full.json
 
-sampler=NeuralSampler
+sampler=NeuralSamplerPosEmbLearnableLargeEnergyNN
 preserve_ratio=0.1
 
 epoch=40
@@ -58,7 +58,7 @@ wa_start=21
 wa_end=40
 lrscheduler_start=10
 
-for sampler in NeuralSampler_NNLSTM, NeuralSamplerNoFakeSoftmax,NeuralSamplerPosEmb,NeuralSamplerPosEmbLearnable,NeuralSamplerPosEmbSumLearnable,NeuralSamplerPosEmbSum,NeuralSampler, NeuralSamplerMiddle, NoAction
+for sampler in NeuralSamplerPosEmbLearnableLargeEnergy
 do
 exp_dir=./exp/${date}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
 # exp_dir=./exp/avg-pool-0.1-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
