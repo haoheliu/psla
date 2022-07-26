@@ -1,0 +1,17 @@
+07/23/2022 12:13:01 PM - INFO: Use positional embedding
+07/23/2022 12:31:48 PM - INFO: Use positional embedding
+07/23/2022 12:32:37 PM - INFO: Use positional embedding
+07/23/2022 12:33:11 PM - INFO: Use positional embedding
+07/23/2022 12:33:44 PM - INFO: Use positional embedding
+07/23/2022 12:34:11 PM - INFO: Use positional embedding
+07/23/2022 12:36:49 PM - INFO: Use positional embedding
+07/23/2022 12:37:14 PM - INFO: Use positional embedding
+07/23/2022 12:38:09 PM - INFO: Use positional embedding
+07/23/2022 12:38:55 PM - INFO: Use positional embedding
+07/23/2022 12:40:32 PM - INFO: Use positional embedding
+07/23/2022 01:57:06 PM - INFO: Use positional embedding
+07/23/2022 01:57:24 PM - INFO: Use positional embedding
+07/25/2022 12:41:13 PM - INFO: Use positional embedding
+07/25/2022 12:41:35 PM - INFO: Use positional embedding
+07/25/2022 12:41:54 PM - INFO: Use positional embedding
+07/25/2022 03:57:50 PM - INFO: Use positional embedding

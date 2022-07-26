@@ -112,16 +112,16 @@ def train(audio_model, train_loader, test_loader, args):
 
                 if isinstance(loss_fn, torch.nn.CrossEntropyLoss):
                     loss1 = loss_fn(audio_output, torch.argmax(labels.long(), axis=1))
-                    loss = loss1 
-                    # if(score_loss < 0.01):
-                    #     loss = loss - score_loss
+                    loss = loss1 # - score_loss
+                    if(score_loss < 0.01 and args.score_loss):
+                        loss = loss - score_loss
                 else:
                     epsilon = 1e-7
                     audio_output = torch.clamp(audio_output, epsilon, 1. - epsilon)
                     loss1 = loss_fn(audio_output, labels)
-                    loss = loss1
-                    # if(score_loss < 0.01):
-                    #     loss = loss - score_loss
+                    loss = loss1 # - score_loss
+                    if(score_loss < 0.01 and args.score_loss):
+                        loss = loss - score_loss
                 
                 # optimization if amp is not used
                 optimizer.zero_grad()
@@ -156,16 +156,16 @@ def train(audio_model, train_loader, test_loader, args):
 
                 end_time = time.time()
                 global_step += 1
-            if(epoch % 10 == 0):
+            if(epoch % args.val_interval == 0):
                 logging.info('start validation')
                 print('start validation')
                 stats, valid_loss = validate(audio_model, test_loader, args, epoch)
 
                 # ensemble results
-                # ensemble_stats = validate_ensemble(args, epoch)
-                # ensemble_mAP = np.mean([stat['AP'] for stat in ensemble_stats])
-                # ensemble_mAUC = np.mean([stat['auc'] for stat in ensemble_stats])
-                # ensemble_acc = ensemble_stats[0]['acc']
+                ensemble_stats = validate_ensemble(args, epoch)
+                ensemble_mAP = np.mean([stat['AP'] for stat in ensemble_stats])
+                ensemble_mAUC = np.mean([stat['auc'] for stat in ensemble_stats])
+                ensemble_acc = ensemble_stats[0]['acc']
 
                 mAP = np.mean([stat['AP'] for stat in stats])
                 mAUC = np.mean([stat['auc'] for stat in stats])
@@ -187,12 +187,12 @@ def train(audio_model, train_loader, test_loader, args):
                 logging.info("train_loss: {:.6f}".format(loss_meter.avg))
                 logging.info("valid_loss: {:.6f}".format(valid_loss))
 
-                # if main_metrics == 'mAP':
-                #     result[epoch-1, :] = [mAP, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_mAP, ensemble_mAUC, optimizer.param_groups[0]['lr']]
-                # else:
-                #     result[epoch-1, :] = [acc, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_acc, ensemble_mAUC, optimizer.param_groups[0]['lr']]
-                # np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
-                # logging.info('validation finished')
+                if main_metrics == 'mAP':
+                    result[epoch-1, :] = [mAP, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_mAP, ensemble_mAUC, optimizer.param_groups[0]['lr']]
+                else:
+                    result[epoch-1, :] = [acc, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_acc, ensemble_mAUC, optimizer.param_groups[0]['lr']]
+                np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
+                logging.info('validation finished')
 
                 if mAP > best_mAP:
                     best_mAP = mAP
@@ -204,9 +204,9 @@ def train(audio_model, train_loader, test_loader, args):
                     if main_metrics == 'acc':
                         best_epoch = epoch
 
-                # if ensemble_mAP > best_ensemble_mAP:
-                #     best_ensemble_epoch = epoch
-                #     best_ensemble_mAP = ensemble_mAP
+                if ensemble_mAP > best_ensemble_mAP:
+                    best_ensemble_epoch = epoch
+                    best_ensemble_mAP = ensemble_mAP
 
                 if best_epoch == epoch:
                     torch.save(audio_model.state_dict(), "%s/models/best_audio_model.pth" % (exp_dir))
@@ -235,9 +235,11 @@ def train(audio_model, train_loader, test_loader, args):
             per_sample_data_time.reset()
             loss_meter.reset()
             per_sample_dnn_time.reset()
-    except:
+    except Exception as e:
         logging.exception("message")
+        print(e)
         logging.info("Stop training...")
+
     # if test weight averaging
     if args.wa == True:
         stats=validate_wa(audio_model, test_loader, args, args.wa_start, args.wa_end)

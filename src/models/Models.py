@@ -69,7 +69,7 @@ class MBNet(nn.Module):
         return out
 
 class EffNetAttention(nn.Module):
-    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=NeuralSampler, preserve_ratio=0.1):
+    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1):
         super(EffNetAttention, self).__init__()
         self.middim = [1280, 1280, 1408, 1536, 1792, 2048, 2304, 2560]
         self.input_seq_length = input_seq_length
@@ -117,7 +117,7 @@ class EffNetAttention(nn.Module):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
         ret = self.neural_sampler(x)
         x, score_loss = ret['feature'], ret['score_loss']
-        if(self.batch_idx % 300 == 0):
+        if(self.batch_idx % 300 == 0 and self.training):
             self.neural_sampler.visualize(ret)
 
         x = x.transpose(2, 3)
