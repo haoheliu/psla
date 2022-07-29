@@ -73,6 +73,7 @@ parser.add_argument('--bal', help='if use balance sampling', type=ast.literal_ev
 
 parser.add_argument("--sampler", type=str, default="NeuralSampler")
 parser.add_argument("--preserve_ratio", type=float, default=0.1)
+parser.add_argument("--alpha", type=float, default=1.0, help="The scaling factor to the importance score")
 parser.add_argument("--val_interval", type=int, default=1)
 parser.add_argument("--score_loss", type=bool, default=False)
 
@@ -110,7 +111,7 @@ if args.data_eval != None:
         batch_size=args.batch_size*2, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
 if args.model == 'efficientnet':
-    audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio)
+    audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha)
 elif args.model == 'resnet':
     audio_model = models.ResNetAttention(label_dim=args.n_class, pretrain=args.impretrain)
 elif args.model == 'mbnet':

@@ -15,6 +15,7 @@ fig/*
 *.pptx
 *.mp4
 exp
+*.pyc
 fairseq
 *.pyc
 *.png

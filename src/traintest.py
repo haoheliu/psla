@@ -162,10 +162,11 @@ def train(audio_model, train_loader, test_loader, args):
                 stats, valid_loss = validate(audio_model, test_loader, args, epoch)
 
                 # ensemble results
-                ensemble_stats = validate_ensemble(args, epoch)
-                ensemble_mAP = np.mean([stat['AP'] for stat in ensemble_stats])
-                ensemble_mAUC = np.mean([stat['auc'] for stat in ensemble_stats])
-                ensemble_acc = ensemble_stats[0]['acc']
+                if(args.val_interval == 1):
+                    ensemble_stats = validate_ensemble(args, epoch)
+                    ensemble_mAP = np.mean([stat['AP'] for stat in ensemble_stats])
+                    ensemble_mAUC = np.mean([stat['auc'] for stat in ensemble_stats])
+                    ensemble_acc = ensemble_stats[0]['acc']
 
                 mAP = np.mean([stat['AP'] for stat in stats])
                 mAUC = np.mean([stat['auc'] for stat in stats])
@@ -187,11 +188,12 @@ def train(audio_model, train_loader, test_loader, args):
                 logging.info("train_loss: {:.6f}".format(loss_meter.avg))
                 logging.info("valid_loss: {:.6f}".format(valid_loss))
 
-                if main_metrics == 'mAP':
-                    result[epoch-1, :] = [mAP, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_mAP, ensemble_mAUC, optimizer.param_groups[0]['lr']]
-                else:
-                    result[epoch-1, :] = [acc, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_acc, ensemble_mAUC, optimizer.param_groups[0]['lr']]
-                np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
+                if(args.val_interval == 1):
+                    if main_metrics == 'mAP':
+                        result[epoch-1, :] = [mAP, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_mAP, ensemble_mAUC, optimizer.param_groups[0]['lr']]
+                    else:
+                        result[epoch-1, :] = [acc, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_acc, ensemble_mAUC, optimizer.param_groups[0]['lr']]
+                    np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
                 logging.info('validation finished')
 
                 if mAP > best_mAP:
@@ -204,9 +206,10 @@ def train(audio_model, train_loader, test_loader, args):
                     if main_metrics == 'acc':
                         best_epoch = epoch
 
-                if ensemble_mAP > best_ensemble_mAP:
-                    best_ensemble_epoch = epoch
-                    best_ensemble_mAP = ensemble_mAP
+                if(args.val_interval == 1):
+                    if ensemble_mAP > best_ensemble_mAP:
+                        best_ensemble_epoch = epoch
+                        best_ensemble_mAP = ensemble_mAP
 
                 if best_epoch == epoch:
                     torch.save(audio_model.state_dict(), "%s/models/best_audio_model.pth" % (exp_dir))
