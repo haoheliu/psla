@@ -17,8 +17,8 @@ date=$(date '+%Y-%m-%d-%H-%M')
 att_head=4
 model=efficientnet
 psla=True
-eff_b=2
-batch_size=96
+eff_b=7
+batch_size=8
 
 # pooling=False
 
@@ -50,15 +50,15 @@ lr=5e-4
 
 trpath=./datafiles/fsd50k_tr_full.json
 
-sampler=NeuralSamplerPosEmbLearnableLargeEnergyNN
-preserve_ratio=0.1
+sampler=NoAction
+preserve_ratio=0.5
 
 epoch=40
 wa_start=21
 wa_end=40
 lrscheduler_start=10
 
-for sampler in NeuralSamplerPosEmbLearnableLargeEnergy
+for sampler in NeuralSamplerPosEmbLearnableLargeEnergy NeuralSamplerPosEmbLearnableLargeEnergyNN NeuralSamplerPosEmbLearnableLargeEnergy 
 do
 exp_dir=./exp/${date}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
 # exp_dir=./exp/avg-pool-0.1-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
@@ -71,5 +71,5 @@ CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val .
 --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
 --dataset_mean -4.6476 --dataset_std 4.5699 --target_length 3000 --noise False \
 --metrics mAP --warmup False --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
---wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} --val_interval 1
 done

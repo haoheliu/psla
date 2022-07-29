@@ -44,10 +44,10 @@ then
   trpath=/media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_bal_train_data.json
   # original set
   #trpath=./datafiles/balanced_train_data.json
-  epoch=100
+  epoch=90
   wa_start=41
-  wa_end=100
-  lrscheduler_start=35
+  wa_end=90
+  lrscheduler_start=50
 else
   bal=${full_bal}
   lr=1e-4
@@ -60,10 +60,15 @@ else
   lrscheduler_start=10
 fi
 
-# echo $sampler
-# exp_dir=./exp/${date}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git
-# mkdir -p $exp_dir
+preserve_ratio=0.25
+batch_size=96
 
+# sampler=NeuralSamplerPosEmbLearnableLargeEnergyRandAlpha
+# for alpha in 1.0
+# do
+# echo $alpha
+# exp_dir=./exp/${date}-${sampler}-alpha${alpha}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+# mkdir -p $exp_dir
 # CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
 # --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv \
 # --n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
@@ -71,22 +76,15 @@ fi
 # --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
 # --dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
 # --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
-# --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} 
+# --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10 --alpha ${alpha}
+# done
 
-preserve_ratio=0.1
-batch_size=96
-
-#############################
-  # freqm=0
-  # timem=0
-#############################
-
-for sampler in NeuralSamplerPosEmbLearnableLargeEnergyNN NeuralSamplerPosEmbLearnableLargeEnergy NeuralSamplerAvgPool NeuralSamplerPosEmbLearnableLargeEnergyNN NeuralSamplerPosEmbLearnableLargeEnergy NeuralSamplerAvgPool
+for sampler in NeuralSamplerPosEmbLearnableLargeEnergyNN NeuralSamplerPosEmbLearnableLargeEnergyNN
 do
 echo $sampler
-exp_dir=./exp/${date}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+exp_dir=./exp/${date}-${sampler}-alpha${alpha}-nograd-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+# exp_dir=./exp/test
 mkdir -p $exp_dir
-
 CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
 --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv \
 --n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
@@ -94,6 +92,5 @@ CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /
 --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
 --dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
 --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
---wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10
-# echo $sampler
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10 --alpha 1.0
 done
