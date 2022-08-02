@@ -136,7 +136,7 @@ class AudiosetDataset(Dataset):
         # Mel spectrogram
         fbank = torchaudio.compliance.kaldi.fbank(waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
                                                   window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=10) # TODO
-        pad_val = 0.0
+        pad_val = -15.7
         # Wavegram
         # fbank,_ = self.dsp.wav_to_wavegram(waveform.unsqueeze(1), 7)
         # fbank = fbank[0,...].permute(1,0)
@@ -165,9 +165,9 @@ class AudiosetDataset(Dataset):
 
         # cut and pad
         if p > 0:
-            m = torch.nn.ZeroPad2d((0, 0, 0, p))
-            # fbank = torch.nn.functional.pad(fbank, (0, 0, 0, p), mode='constant', value=pad_val) 
-            fbank = m(fbank)
+            # m = torch.nn.ZeroPad2d((0, 0, 0, p))
+            fbank = torch.nn.functional.pad(fbank, (0, 0, 0, p), mode='constant', value=pad_val) 
+            # fbank = m(fbank)
         elif p < 0:
             fbank = fbank[0:target_length, :]
 

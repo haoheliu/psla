@@ -14,9 +14,11 @@ fig/*
 !/egs/fsd50k/class_labels_indices.csv
 *.pptx
 *.mp4
+*.npy
 exp
 *.pyc
 fairseq
 *.pyc
 *.png
 audioset*
+log*
