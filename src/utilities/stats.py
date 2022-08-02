@@ -1,7 +1,10 @@
+import sys
+sys.path.append("/media/Disk_HDD/haoheliu/projects/psla/src")
 import numpy as np
 from scipy import stats
 from sklearn import metrics
 import torch
+from utilities.new_map import mean_average_precision
 
 def d_prime(auc):
     standard_normal = stats.norm()
@@ -21,6 +24,10 @@ def calculate_stats(output, target):
 
     classes_num = target.shape[-1]
     stats = []
+
+    ap,fps_ap, tps_ap, tps_fps_ap = mean_average_precision(target, output)
+
+    print("ap, fps_ap, tps_ap, tps_fps_ap", np.mean(ap), np.mean(fps_ap), np.mean(tps_ap), np.mean(tps_fps_ap))
 
     # Class-wise statistics
     for k in range(classes_num):

@@ -17,6 +17,19 @@ import numpy as np
 import pickle
 from torch.cuda.amp import autocast,GradScaler
 import logging
+import pickle
+from tqdm import tqdm
+
+def save_pickle(obj,fname):
+    print("Save pickle at "+fname)
+    with open(fname,'wb') as f:
+        pickle.dump(obj,f)
+
+def load_pickle(fname):
+    print("Load pickle at "+fname)
+    with open(fname,'rb') as f:
+        res = pickle.load(f)
+    return res
 
 def train(audio_model, train_loader, test_loader, args):
     try:
@@ -52,6 +65,11 @@ def train(audio_model, train_loader, test_loader, args):
             model_checkpoint = torch.load(os.path.join(args.exp_dir, "models/best_audio_model.pth"), map_location="cpu")
             audio_model.load_state_dict(model_checkpoint)
 
+        # print("Reloading pretrained audioset model!")
+        # model_checkpoint = torch.load("/media/Disk_HDD/haoheliu/projects/psla/pretrained_models/as_mdl_0_wa.pth", map_location="cpu")
+        # # model_checkpoint = torch.load("/media/Disk_HDD/haoheliu/projects/psla/pretrained_models/as_mdl_0.pth", map_location="cpu")
+        # audio_model.load_state_dict(model_checkpoint)
+
         audio_model = audio_model.to(device)
         # Set up the optimizer
         trainables = [p for p in audio_model.parameters() if p.requires_grad]
@@ -77,7 +95,7 @@ def train(audio_model, train_loader, test_loader, args):
         logging.info('now training with {:s}, main metrics: {:s}, loss function: {:s}, learning rate scheduler: {:s}'.format(str(args.dataset), str(main_metrics), str(loss_fn), str(scheduler)))
         logging.info('The learning rate scheduler starts at {:d} epoch with decay rate of {:.3f} '.format(args.lrscheduler_start, args.lrscheduler_decay))
 
-        epoch += 1
+        # epoch += 1
 
         logging.info("current #steps=%s, #epochs=%s" % (global_step, epoch))
         logging.info("start training...")
@@ -93,6 +111,9 @@ def train(audio_model, train_loader, test_loader, args):
             logging.info("current #epochs=%s, #steps=%s" % (epoch, global_step))
 
             for i, (audio_input, labels) in enumerate(train_loader):
+                if(epoch == 0): 
+                    print("Perform validation first")
+                    break
                 B = audio_input.size(0)
                 audio_input = audio_input.to(device, non_blocking=True)
                 labels = labels.to(device, non_blocking=True)
@@ -161,16 +182,17 @@ def train(audio_model, train_loader, test_loader, args):
                 print('start validation')
                 stats, valid_loss = validate(audio_model, test_loader, args, epoch)
 
+                mAP = np.mean([stat['AP'] for stat in stats])
+                mAUC = np.mean([stat['auc'] for stat in stats])
+                acc = stats[0]['acc']
+                print("mAP, mAUC, acc",mAP, mAUC, acc)
+
                 # ensemble results
                 if(args.val_interval == 1):
                     ensemble_stats = validate_ensemble(args, epoch)
                     ensemble_mAP = np.mean([stat['AP'] for stat in ensemble_stats])
                     ensemble_mAUC = np.mean([stat['auc'] for stat in ensemble_stats])
                     ensemble_acc = ensemble_stats[0]['acc']
-
-                mAP = np.mean([stat['AP'] for stat in stats])
-                mAUC = np.mean([stat['auc'] for stat in stats])
-                acc = stats[0]['acc']
 
                 middle_ps = [stat['precisions'][int(len(stat['precisions'])/2)] for stat in stats]
                 middle_rs = [stat['recalls'][int(len(stat['recalls'])/2)] for stat in stats]
@@ -273,14 +295,16 @@ def validate(audio_model, val_loader, args, epoch, eval_target=False):
     A_predictions = []  
     A_targets = []  
     A_loss = [] 
+    A_fname = []
     with torch.no_grad():   
-        for i, (audio_input, labels) in enumerate(val_loader):  
+        for i, (audio_input, labels ,fname) in tqdm(enumerate(val_loader)):  
             audio_input = audio_input.to(device)    
             # compute output    
             audio_output,_ = audio_model(audio_input) 
             predictions = audio_output.to('cpu').detach()   
             A_predictions.append(predictions)   
             A_targets.append(labels)    
+            A_fname.append(fname)
             # compute the loss  
             labels = labels.to(device)  
             epsilon = 1e-7  
@@ -293,8 +317,18 @@ def validate(audio_model, val_loader, args, epoch, eval_target=False):
             batch_time.update(time.time() - end)    
             end = time.time()   
         audio_output = torch.cat(A_predictions) 
+        fname = np.array(A_fname)
         target = torch.cat(A_targets)   
         loss = np.mean(A_loss)  
+
+        print("save the model prediction pickle file")
+        output_dict = {}
+        output_dict["audio_name"] = fname[:,0]
+        output_dict["clipwise_output"] = audio_output.cpu().numpy()
+        output_dict["target"] = target.cpu().numpy()
+        path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+        save_pickle(output_dict, os.path.join(path, "%s_%s.pkl" % (args.sampler, epoch)))
+
         stats = calculate_stats(audio_output, target)   
         # save the prediction here  
         exp_dir = args.exp_dir  
