@@ -8,9 +8,6 @@ import torch
 import torch.nn.functional
 from torch.utils.data import Dataset
 import random
-import logging
-from torchsubband import SubbandDSP
-import os
 
 def make_index_dict(label_csv):
     index_lookup = {}
@@ -60,34 +57,34 @@ class AudiosetDataset(Dataset):
 
         self.data = data_json['data']
         self.audio_conf = audio_conf
-        logging.info('---------------the {:s} dataloader---------------'.format(self.audio_conf.get('mode')))
+        print('---------------the {:s} dataloader---------------'.format(self.audio_conf.get('mode')))
         self.melbins = self.audio_conf.get('num_mel_bins')
         self.freqm = self.audio_conf.get('freqm')
         self.timem = self.audio_conf.get('timem')
-        logging.info('now using following mask: {:d} freq, {:d} time'.format(self.audio_conf.get('freqm'), self.audio_conf.get('timem')))
+        print('now using following mask: {:d} freq, {:d} time'.format(self.audio_conf.get('freqm'), self.audio_conf.get('timem')))
         self.mixup = self.audio_conf.get('mixup')
-        logging.info('now using mix-up with rate {:f}'.format(self.mixup))
+        self.mode = self.audio_conf.get('mode')
+        print('now using mix-up with rate {:f}'.format(self.mixup))
         self.dataset = self.audio_conf.get('dataset')
-        logging.info('now process ' + self.dataset)
+        print('now process ' + self.dataset)
         # dataset spectrogram mean and std, used to normalize the input
         self.norm_mean = self.audio_conf.get('mean')
         self.norm_std = self.audio_conf.get('std')
-        self.mode = self.audio_conf.get('mode')
         # skip_norm is a flag that if you want to skip normalization to compute the normalization stats using src/get_norm_stats.py, if Ture, input normalization will be skipped for correctly calculating the stats.
         # set it as True ONLY when you are getting the normalization stats.
         self.skip_norm = self.audio_conf.get('skip_norm') if self.audio_conf.get('skip_norm') else False
         if self.skip_norm:
-            logging.info('now skip normalization (use it ONLY when you are computing the normalization stats).')
+            print('now skip normalization (use it ONLY when you are computing the normalization stats).')
         else:
-            logging.info('use dataset mean {:.3f} and std {:.3f} to normalize the input.'.format(self.norm_mean, self.norm_std))
+            print('use dataset mean {:.3f} and std {:.3f} to normalize the input.'.format(self.norm_mean, self.norm_std))
         # if add noise for data augmentation
         self.noise = self.audio_conf.get('noise')
         if self.noise == True:
-            logging.info('now use noise augmentation')
-        self.dsp = SubbandDSP()
+            print('now use noise augmentation')
+
         self.index_dict = make_index_dict(label_csv)
         self.label_num = len(self.index_dict)
-        logging.info('number of classes is {:d}'.format(self.label_num))
+        print('number of classes is {:d}'.format(self.label_num))
 
     def resample_16k(self, data, sr):
         if(sr == 16000): 
@@ -131,32 +128,8 @@ class AudiosetDataset(Dataset):
             mix_waveform = mix_lambda * waveform1 + (1 - mix_lambda) * waveform2
             waveform = mix_waveform - mix_waveform.mean()
 
-        # torch.Size([1, 160000]) torch.Size([998, 128])
-        
-        # Mel spectrogram
         fbank = torchaudio.compliance.kaldi.fbank(waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
-                                                  window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=10) # TODO
-        pad_val = 0.0
-        # Wavegram
-        # fbank,_ = self.dsp.wav_to_wavegram(waveform.unsqueeze(1), 7)
-        # fbank = fbank[0,...].permute(1,0)
-        # self.norm_mean, self.norm_std = 1e-5, 0.01
-        # pad_val = 0.0
-        
-        # Wavegram2
-        # fbank = waveform.reshape(..., 128)
-        # pad_val = 0.0
-
-        # Wavegram3
-        # buffer = []
-        # for i in range(128):
-        #     buffer.append(waveform[:, i::128])
-        # min_len = min([each.size(1) for each in buffer])
-        # for i in range(len(buffer)):
-        #     buffer[i] = buffer[i][:, :min_len]
-        # fbank = torch.cat(buffer, dim=0).permute(1, 0)
-        # pad_val = 0.0
-        # End
+                                                  window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=10)
 
         target_length = self.audio_conf.get('target_length')
         n_frames = fbank.shape[0]
@@ -166,7 +139,6 @@ class AudiosetDataset(Dataset):
         # cut and pad
         if p > 0:
             m = torch.nn.ZeroPad2d((0, 0, 0, p))
-            # fbank = torch.nn.functional.pad(fbank, (0, 0, 0, p), mode='constant', value=pad_val) 
             fbank = m(fbank)
         elif p < 0:
             fbank = fbank[0:target_length, :]
@@ -183,8 +155,6 @@ class AudiosetDataset(Dataset):
         audio is a FloatTensor of size (N_freq, N_frames) for spectrogram, or (N_frames) for waveform
         nframes is an integer
         """
-        # print(self.index_dict.keys())
-        # print(len(self.index_dict.keys()))
         # do mix-up for this sample (controlled by the given mixup rate)
         if random.random() < self.mixup:
             while(True):
@@ -232,23 +202,17 @@ class AudiosetDataset(Dataset):
                 label_indices[int(self.index_dict[label_str])] = 1.0
 
             label_indices = torch.FloatTensor(label_indices)
-        
+
         # SpecAug, not do for eval set
-        fbank = fbank.exp()
-        assert torch.sum(fbank < 0) == 0
-        ############################### Spec Aug ####################################################
+        freqm = torchaudio.transforms.FrequencyMasking(self.freqm)
+        timem = torchaudio.transforms.TimeMasking(self.timem)
         fbank = torch.transpose(fbank, 0, 1)
         # this is just to satisfy new torchaudio version.
         fbank = fbank.unsqueeze(0)
-        # torch.Size([1, 128, 1056])
         if self.freqm != 0:
-            fbank = self.frequency_masking(fbank, self.freqm)
-            # fbank = self.frequency_fading(fbank, self.freqm * 2)
+            fbank = freqm(fbank)
         if self.timem != 0:
-            fbank = self.time_masking(fbank, self.timem)
-            # fbank = self.time_fading(fbank, self.timem * 2)
-        #############################################################################################
-        fbank = (fbank+1e-7).log()
+            fbank = timem(fbank)
         # squeeze back
         fbank = fbank.squeeze(0)
         fbank = torch.transpose(fbank, 0, 1)
@@ -265,61 +229,7 @@ class AudiosetDataset(Dataset):
             fbank = torch.roll(fbank, np.random.randint(-10, 10), 0)
 
         # the output fbank shape is [time_frame_num, frequency_bins], e.g., [1024, 128]
-
-        # the output fbank shape is [time_frame_num, frequency_bins], e.g., [1024, 128]
-        if(self.mode == "evaluation"):
-            return fbank, label_indices, os.path.basename(datum['wav'])
-        else:
-            return fbank, label_indices
-
-    def random_uniform(self, start, end):
-        val = torch.rand(1).item()
-        return start + (end-start) * val
-
-    def frequency_masking(self, fbank, freqm):
-        bs, freq, tsteps = fbank.size()
-        mask_len = int(self.random_uniform(freqm // 8, freqm))
-        mask_start = int(self.random_uniform(start=0, end=freq-mask_len))
-        fbank[:,mask_start:mask_start+mask_len,:] *= 0.0
-        # value = self.random_uniform(0.0, 1.0)
-        # fbank[:,mask_start:mask_start+mask_len,:] += value
-        return fbank
-
-    def time_masking(self, fbank, timem):
-        bs, freq, tsteps = fbank.size()
-        mask_len = int(self.random_uniform(timem // 8, timem))
-        mask_start = int(self.random_uniform(start=0, end=tsteps-mask_len))
-        fbank[:,:,mask_start:mask_start+mask_len] *= 0.0
-        # value = self.random_uniform(0.0, 1.0)
-        # fbank[:,:,mask_start:mask_start+mask_len] += value
-        return fbank
-
-    def frequency_fading(self, fbank, freqm):
-        bs, freq, tsteps = fbank.size()
-        mask_len = int(self.random_uniform(freqm // 8, freqm))
-        if(mask_len % 2 == 1): mask_len += 1
-        mask_start = int(self.random_uniform(start=0, end=freq-mask_len-1))
-        
-        weight = torch.cat([torch.linspace(1,0,mask_len//2), torch.linspace(0,1,mask_len//2)])
-        weight = weight[None, : ,None].expand(fbank.size(0), mask_len, fbank.size(2))
-
-        fbank[:,mask_start:mask_start+mask_len,:] *= weight
-
-        return fbank
-
-    def time_fading(self, fbank, timem):
-        bs, freq, tsteps = fbank.size()
-        mask_len = int(self.random_uniform(timem // 8, timem))
-        if(mask_len % 2 == 1): mask_len += 1
-        mask_start = int(self.random_uniform(start=0, end=tsteps-mask_len-1))
-        
-        weight = torch.cat([torch.linspace(1,0,mask_len//2), torch.linspace(0,1,mask_len//2)])
-        weight = weight[None, None, : ].expand(fbank.size(0), fbank.size(1), mask_len)
-
-        fbank[:,:,mask_start:mask_start+mask_len] *= weight
-        
-        return fbank
-
+        return fbank, label_indices
 
     def __len__(self):
         return len(self.data)

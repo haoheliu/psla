@@ -103,12 +103,12 @@ else:
 
 val_loader = torch.utils.data.DataLoader(
     dataloaders.AudiosetDataset(args.data_val, label_csv=args.label_csv, audio_conf=val_audio_conf),
-    batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+    batch_size=1, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
 if args.data_eval != None:
     eval_loader = torch.utils.data.DataLoader(
         dataloaders.AudiosetDataset(args.data_eval, label_csv=args.label_csv, audio_conf=val_audio_conf),
-        batch_size=args.batch_size*2, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        batch_size=1, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
 if args.model == 'efficientnet':
     audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha)

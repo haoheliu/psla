@@ -531,6 +531,7 @@ class NeuralSamplerPosEmbLearnableLargeWithMA(nn.Module):
         alpha = torch.sum(weight, dim=1, keepdim=True)
         return weight/(alpha+1e-8)
 
+
 class NeuralSamplerPosEmbLearnableLargeEnergy(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
         super(NeuralSamplerPosEmbLearnableLargeEnergy, self).__init__()
@@ -597,6 +598,135 @@ class NeuralSamplerPosEmbLearnableLargeEnergy(nn.Module):
         ret = {}
         # score.shape: torch.Size([10, 100, 1])
         # feature.shape: torch.Size([10, 100, 256])
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < 0.99**self.alpha, score > 0.01**self.alpha) # TODO here 0.1 or 0.01
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        # cumsum_weight = cumsum_weight - (score/2)
+
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # cumsum_weight = cumsum_weight * mask
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+        weight = self.weight_fake_softmax(weight, mask)
+        # for i in range(weight.size(0)):
+        #     weight[i] = self.update_element_weight(weight[i])
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        # import ipdb; ipdb.set_trace()
+        pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        ret['emb'] = pos_emb
+        ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret
+
+    def weight_fake_softmax(self, weight, mask):
+        alpha = torch.sum(weight, dim=1, keepdim=True)
+        return weight/(alpha+1e-8)
+
+class NeuralSamplerPosEmbLearnableLargeEnergyMaxPooling(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+        super(NeuralSamplerPosEmbLearnableLargeEnergyMaxPooling, self).__init__()
+        self.input_dim=128
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.alpha = alpha
+        self.feature_channels=2
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.use_pos_emb = True
+        print("ALPHA %s" % self.alpha)
+        self.pre_linear = nn.Sequential(
+            nn.Linear(self.input_dim, self.input_dim*2),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.input_dim*2, self.input_dim*2),
+            nn.ReLU(inplace=True),
+        )
+        self.feature_lstm = nn.LSTM(self.input_dim*2, self.latent_dim*2, self.num_layers, batch_first=True, bidirectional=True)
+        self.score_linear = nn.Sequential(
+            nn.Linear(self.latent_dim*4, self.latent_dim*2),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.latent_dim*2, 1),
+        )
+        self.score_pooling = nn.MaxPool1d(11, stride=1, padding=5)
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding")
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=True)
+    
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(x.exp()**self.alpha, dim=2, keepdim=True)
+        score = magnitude/torch.max(magnitude)
+        ret = self.select_feature_fast(x, score, total_length=int(x.size(1)*self.preserv_ratio))
+        ret['x']=x
+        return ret
+
+    def visualize(self, ret, name=None):
+        x, y, emb, score = ret['x'], ret['feature'], ret['emb'], ret['score']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(411)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(412)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(413)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(414)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            if(name is None):
+                plt.savefig(os.path.join(path, "%s.png" % i))
+            else:
+                plt.savefig(os.path.join(path, "%s_%s.png" % (name, i)))
+            plt.close()
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        # score.shape: torch.Size([10, 100, 1])
+        # feature.shape: torch.Size([10, 100, 256])
+        
+        score = self.score_pooling(score.permute(0,2,1)).permute(0,2,1)
+
         ####################################################################
         # Trying to rescale the total score 
         sum_score = torch.sum(score, dim=(1,2), keepdim=True)
@@ -788,10 +918,145 @@ class NeuralSamplerPosEmbLearnableLargeEnergyRandAlpha(nn.Module):
         alpha = torch.sum(weight, dim=1, keepdim=True)
         return weight/(alpha+1e-8)
 
-
 class NeuralSamplerPosEmbLearnableLargeEnergyNN(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNN, self).__init__()
+        self.input_dim=128
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.feature_channels=2
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
+        self.use_pos_emb = True
+
+        self.pre_linear = nn.Sequential(
+            nn.Linear(self.input_dim, self.input_dim*2),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.input_dim*2, self.input_dim*2),
+            nn.ReLU(inplace=True),
+        )
+        self.feature_lstm = nn.LSTM(self.input_dim*2, self.latent_dim*2, self.num_layers, batch_first=True, bidirectional=True)
+        self.score_linear = nn.Sequential(
+            nn.Linear(self.latent_dim*4, self.latent_dim*2),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.latent_dim*2, 1),
+        )
+        
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding")
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=True)
+    
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        pre_x = self.pre_linear(x)
+        score, (hn, cn) = self.feature_lstm(pre_x)
+        score = torch.sigmoid(self.score_linear(score))
+        ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(511)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(512)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(513)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(514)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(515)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def score_norm(self, score, total_length):
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < 0.99, score > 0.01) # TODO here 0.1 or 0.01
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        return score, total_length
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        # score.shape: torch.Size([10, 100, 1])
+        # feature.shape: torch.Size([10, 100, 256])
+        score, total_length = self.score_norm(score, total_length)
+
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        # cumsum_weight = cumsum_weight - (score/2)
+
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # cumsum_weight = cumsum_weight * mask
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+        weight = self.weight_fake_softmax(weight, mask)
+        # for i in range(weight.size(0)):
+        #     weight[i] = self.update_element_weight(weight[i])
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+
+        ret['emb'] = pos_emb
+        ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret
+
+    def weight_fake_softmax(self, weight, mask):
+        alpha = torch.sum(weight, dim=1, keepdim=True)
+        return weight/(alpha+1e-8)
+
+class NeuralSamplerPosEmbLearnableLargeEnergyNNPosFreeze(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+        super(NeuralSamplerPosEmbLearnableLargeEnergyNNPosFreeze, self).__init__()
         self.input_dim=128
         self.latent_dim=64
         self.feature_dim=128
@@ -829,9 +1094,9 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNN(nn.Module):
         pre_x = self.pre_linear(x)
         score, (hn, cn) = self.feature_lstm(pre_x)
         score = torch.sigmoid(self.score_linear(score))
-        ret = self.select_feature_fast(x, score, total_length=int(x.size(1)*self.preserv_ratio))
+        ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
         ret['x']=x
-        ret['energy']=energy
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
         return ret
 
     def visualize(self, ret):
@@ -855,10 +1120,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNN(nn.Module):
             plt.savefig(os.path.join(path, "%s.png" % i))
             plt.close()
 
-    def select_feature_fast(self, feature, score, total_length):
-        ret = {}
-        # score.shape: torch.Size([10, 100, 1])
-        # feature.shape: torch.Size([10, 100, 256])
+    def score_norm(self, score, total_length):
         ####################################################################
         # Trying to rescale the total score 
         sum_score = torch.sum(score, dim=(1,2), keepdim=True)
@@ -890,6 +1152,13 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNN(nn.Module):
                     if(alpha > 1): alpha=1
                     score[i][axis[i]] += intervel * alpha
         ####################################################################
+        return score, total_length
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        # score.shape: torch.Size([10, 100, 1])
+        # feature.shape: torch.Size([10, 100, 256])
+        score, total_length = self.score_norm(score, total_length)
 
         cumsum_score = torch.cumsum(score, dim=1)
         cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
@@ -921,18 +1190,10 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNN(nn.Module):
         alpha = torch.sum(weight, dim=1, keepdim=True)
         return weight/(alpha+1e-8)
 
-# 07/24/2022 10:55:42 PM - INFO: mAP: 0.229905
-# 07/24/2022 10:55:42 PM - INFO: AUC: 0.929935
-# 07/24/2022 10:55:42 PM - INFO: Avg Precision: 0.008971
-# 07/24/2022 10:55:42 PM - INFO: Avg Recall: 0.972454
-# 07/24/2022 10:55:42 PM - INFO: d_prime: 2.086398
-# 07/24/2022 10:55:42 PM - INFO: train_loss: 0.015294
-# 07/24/2022 10:55:42 PM - INFO: valid_loss: 0.017221
-# Use the first part of the feature lstm output as feat
 
-class NeuralSamplerPosEmbLearnableLarge(nn.Module):
+class NeuralSamplerPosEmbLearnableLargeEnergyNNMaxPooling(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
-        super(NeuralSamplerPosEmbLearnableLarge, self).__init__()
+        super(NeuralSamplerPosEmbLearnableLargeEnergyNNMaxPooling, self).__init__()
         self.input_dim=128
         self.latent_dim=64
         self.feature_dim=128
@@ -940,6 +1201,7 @@ class NeuralSamplerPosEmbLearnableLarge(nn.Module):
         self.feature_channels=2
         self.preserv_ratio=preserve_ratio
         self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
         self.use_pos_emb = True
 
         self.pre_linear = nn.Sequential(
@@ -954,6 +1216,8 @@ class NeuralSamplerPosEmbLearnableLarge(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(self.latent_dim*2, 1),
         )
+
+        self.score_pooling = nn.MaxPool1d(11, stride=1, padding=5)
         
         if(self.use_pos_emb):
             emb_dropout=0.0
@@ -961,40 +1225,84 @@ class NeuralSamplerPosEmbLearnableLarge(nn.Module):
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
             self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=True)
     
+
     def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
         pre_x = self.pre_linear(x)
         score, (hn, cn) = self.feature_lstm(pre_x)
         score = torch.sigmoid(self.score_linear(score))
-        ret = self.select_feature_fast(x, score, total_length=int(x.size(1)*self.preserv_ratio))
+        ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
         ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
         return ret
 
     def visualize(self, ret):
-        x, y, emb, score = ret['x'], ret['feature'], ret['emb'], ret['score']
+        x, y, emb, score, energy = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy']
         y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
         import matplotlib.pyplot as plt
         for i in range(10):
+            if(i >= x.size(0)): break
             plt.figure(figsize=(6, 8))
-            plt.subplot(411)
+            plt.subplot(511)
             plt.plot(score[i,:,0].detach().cpu().numpy())
-            plt.subplot(412)
+            plt.subplot(512)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(513)
             plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
-            plt.subplot(413)
+            plt.subplot(514)
             plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
-            plt.subplot(414)
+            plt.subplot(515)
             plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
             path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
             plt.savefig(os.path.join(path, "%s.png" % i))
             plt.close()
 
-    def select_feature_fast(self, feature, score, total_length):
-        ret = {}
-        # score.shape: torch.Size([10, 100, 1])
-        # feature.shape: torch.Size([10, 100, 256])
+    def score_norm(self, score, total_length):
+        score = self.score_pooling(score.permute(0,2,1)).permute(0,2,1)
+
+        ####################################################################
+        # Trying to rescale the total score 
         sum_score = torch.sum(score, dim=(1,2), keepdim=True)
         # Normalize the sum of score to the total length
         score = (score / sum_score) * total_length
         # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < 0.99, score > 0.01) # TODO here 0.1 or 0.01
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        
+        return score, total_length
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        # score.shape: torch.Size([10, 100, 1])
+        # feature.shape: torch.Size([10, 100, 256])
+        score, total_length = self.score_norm(score, total_length)
+
         cumsum_score = torch.cumsum(score, dim=1)
         cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
         # cumsum_weight = cumsum_weight - (score/2)
@@ -1011,8 +1319,10 @@ class NeuralSamplerPosEmbLearnableLarge(nn.Module):
         # for i in range(weight.size(0)):
         #     weight[i] = self.update_element_weight(weight[i])
         tensor_list = torch.matmul(weight.permute(0,2,1), feature)
-
         pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+
         ret['emb'] = pos_emb
         ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
         ret['score_loss'] = torch.mean(torch.std(score, dim=1))
@@ -1495,7 +1805,7 @@ class NeuralSampler_NNLSTM(nn.Module):
 # 07/23/2022 04:02:14 AM - INFO: train_loss: 0.013613
 # 07/23/2022 04:02:14 AM - INFO: valid_loss: 0.015424
 class NoAction(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio):
+    def __init__(self, input_seq_length, preserve_ratio, alpha):
         super(NoAction, self).__init__()
         self.feature_channels=1
 
@@ -1552,16 +1862,14 @@ def test_feature():
         ret = sampler(spec)
         sampler.visualize(ret, name=file.split('.')[0])
 
-
 def test_feature_single():
     import librosa
     import numpy as np
-        
     x,_ = librosa.load(os.path.join("/media/Disk_HDD/haoheliu/datasets/AudioSet/eval_segments", "YZxq2_xOLT8o.wav"), sr=None)
     spec = torch.tensor(np.abs(librosa.feature.melspectrogram(x)) + 1e-8).log()
     spec = spec[None,...].permute(0,2,1)
     spec = torch.nn.functional.pad(spec, (0, 0, 0,374), value=-15.7)
-    sampler = NeuralSamplerPosEmbLearnableLargeEnergy(1000, 0.2, alpha=0.5)
+    sampler = NeuralSamplerPosEmbLearnableLargeEnergyv2(1000, 0.25, alpha=1.0)
     print(spec.size())
     ret = sampler(spec)
     sampler.visualize(ret, name="test")
@@ -1584,10 +1892,12 @@ if __name__ == "__main__":
     datefmt="%m/%d/%Y %I:%M:%S %p",
     )
 
-    test_feature_single()
+    # test_feature_single()
 
     # test_select_feature()
-    # test_sampler(NeuralSamplerPosEmbLearnableLargeEnergy)
+    test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNMaxPooling)
+    # test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyv4)
+    # test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyv5)
     # test_sampler(NeuralSamplerPosEmbLearnableLarge)
     # test_sampler(NeuralSamplerPosEmbLearnableLargeWithFeat)
     # test_sampler(NeuralSamplerPosEmbLearnableLargeWithFeatv2)

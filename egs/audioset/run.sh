@@ -62,24 +62,9 @@ fi
 
 preserve_ratio=0.25
 batch_size=96
+alpha=1.0
 
-# sampler=NeuralSamplerPosEmbLearnableLargeEnergyRandAlpha
-# for alpha in 1.0
-# do
-# echo $alpha
-# exp_dir=./exp/${date}-${sampler}-alpha${alpha}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
-# mkdir -p $exp_dir
-# CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
-# --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv \
-# --n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
-# --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
-# --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
-# --dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
-# --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
-# --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10 --alpha ${alpha}
-# done
-
-for sampler in NeuralSamplerPosEmbLearnableLargeEnergyNN NeuralSamplerPosEmbLearnableLargeEnergyNN
+for sampler in NeuralSamplerPosEmbLearnableLargeEnergyv2 NeuralSamplerPosEmbLearnableLargeEnergyv3 NeuralSamplerPosEmbLearnableLargeEnergyv4 NeuralSamplerPosEmbLearnableLargeEnergyv5 NeuralSamplerPosEmbLearnableLargeEnergyv2 NeuralSamplerPosEmbLearnableLargeEnergyv3 NeuralSamplerPosEmbLearnableLargeEnergyv4 NeuralSamplerPosEmbLearnableLargeEnergyv5 NeuralSamplerPosEmbLearnableLargeEnergyNNv3 NeuralSamplerPosEmbLearnableLargeEnergyNNv2 NeuralSamplerPosEmbLearnableLargeEnergyNNv3 NeuralSamplerPosEmbLearnableLargeEnergyNNv2 NeuralSamplerPosEmbLearnableLargeEnergyNNv3 NeuralSamplerPosEmbLearnableLargeEnergyNNv2
 do
 echo $sampler
 exp_dir=./exp/${date}-${sampler}-alpha${alpha}-nograd-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
@@ -92,5 +77,73 @@ CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /
 --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
 --dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
 --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
---wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10 --alpha 1.0
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10 --alpha ${alpha}
+done
+
+sampler=NeuralSamplerPosEmbLearnableLargeEnergyv2
+for alpha in 0.5 0.7 0.9 1.1 1.3 1.5 1.7 1.9 2.1 2.3 2.5
+do
+echo $alpha
+exp_dir=./exp/${date}-${sampler}-alpha${alpha}-nograd-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+# exp_dir=./exp/test
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10 --alpha ${alpha}
+done
+
+sampler=NeuralSamplerPosEmbLearnableLargeEnergyv5
+for alpha in 0.5 0.7 0.9 1.1 1.3 1.5 1.7 1.9 2.1 2.3 2.5
+do
+echo $alpha
+exp_dir=./exp/${date}-${sampler}-alpha${alpha}-nograd-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+# exp_dir=./exp/test
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10 --alpha ${alpha}
+done
+
+sampler=NeuralSamplerPosEmbLearnableLargeEnergyv3
+for alpha in 0.5 0.7 0.9 1.1 1.3 1.5 1.7 1.9 2.1 2.3 2.5
+do
+echo $alpha
+exp_dir=./exp/${date}-${sampler}-alpha${alpha}-nograd-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+# exp_dir=./exp/test
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10 --alpha ${alpha}
+done
+
+sampler=NeuralSamplerPosEmbLearnableLargeEnergyv4
+for alpha in 0.5 0.7 0.9 1.1 1.3 1.5 1.7 1.9 2.1 2.3 2.5
+do
+echo $alpha
+exp_dir=./exp/${date}-${sampler}-alpha${alpha}-nograd-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+# exp_dir=./exp/test
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv /media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss True --val_interval 10 --alpha ${alpha}
 done
