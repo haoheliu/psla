@@ -8,9 +8,9 @@ import warnings
 import sklearn
 
 
-GRAPH_WEIGHT="/media/Disk_HDD/haoheliu/projects/psla/src/utilities/undirected_graph_connectivity.npy"
-LABEL_INDECES="/media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv"
-FPS_TPS_LOOKUP_PKL = "fps_tps_lookup_v2.pkl"
+# GRAPH_WEIGHT="/media/Disk_HDD/haoheliu/projects/psla/src/utilities/undirected_graph_connectivity.npy"
+# LABEL_INDECES="/media/Disk_HDD/haoheliu/projects/psla/egs/audioset/data/class_labels_indices.csv"
+FPS_TPS_LOOKUP_PKL = "fps_tps_lookup_18816.pkl"
 
 def precision_recall_curve(y_true, probas_pred, *, pos_label=None, tps_weight=None, fps_weight=None):
     """Compute precision-recall pairs for different probability thresholds.
@@ -233,20 +233,20 @@ def _average_precision(y_true, pred_scores, tps_weight=None, fps_weight=None):
     AP = numpy.sum((recalls[:-1] - recalls[1:]) * precisions[:-1])
     return AP
 
-def build_label_to_class():
+def build_label_to_class(label_csv):
     import pandas as pd
     label2class = {}
     csv = pd.read_csv(
-        LABEL_INDECES
+        label_csv
     )
     for i, row in csv.iterrows():
         label2class[int(row["index"])] = row["display_name"]
     return label2class
 
-def initialize_weight():
+def initialize_weight(graph_weight_path):
     print("Normalize graph connectivity weight by the max value.")
     weight = np.load(
-        GRAPH_WEIGHT
+        graph_weight_path
     )
     weight /= np.max(weight)
     return weight
@@ -274,24 +274,25 @@ def build_ontology_tps_sample_weight(target, weight, class_idx):
     # Otherwise, the ret value of i-th element will be the confidence that class_idx can be counted as positive
     return ret
 
-def build_tps_fps_weight(target, weight):
+def build_tps_fps_weight(target, weight, graph_weight_path):
     fps_tps_lookup = {}
-    if(not os.path.exists(FPS_TPS_LOOKUP_PKL)):
+    save_path = graph_weight_path+"fps_tps_lookup.pkl"
+    if(not os.path.exists(save_path)):
         for i in tqdm(range(target.shape[1])):
             # For each class
             fps_weight = build_ontology_fps_sample_weight(target, weight, i)
             tps_weight = build_ontology_tps_sample_weight(target, weight, i)
             # tps_weight = None
             fps_tps_lookup[i] = (fps_weight, tps_weight)
-        save_pickle(fps_tps_lookup, FPS_TPS_LOOKUP_PKL)
+        save_pickle(fps_tps_lookup, save_path)
     else:
-        fps_tps_lookup = load_pickle(FPS_TPS_LOOKUP_PKL)
+        fps_tps_lookup = load_pickle(save_path)
     return fps_tps_lookup
 
-def mean_average_precision(target, clipwise_output, new_metric=True):
+def mean_average_precision(target, clipwise_output, graph_weight_path, new_metric=True):
     # tps_fps_weight = self.build_tps_fps_weight(target)
-    weight = initialize_weight()
-    tps_fps_weight = build_tps_fps_weight(target, weight)
+    weight = initialize_weight(graph_weight_path)
+    tps_fps_weight = build_tps_fps_weight(target, weight, graph_weight_path)
 
     ap = []
     fps_ap=[]

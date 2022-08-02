@@ -5,13 +5,14 @@ from scipy import stats
 from sklearn import metrics
 import torch
 from utilities.new_map import mean_average_precision
+import logging
 
 def d_prime(auc):
     standard_normal = stats.norm()
     d_prime = standard_normal.ppf(auc) * np.sqrt(2.0)
     return d_prime
 
-def calculate_stats(output, target):
+def calculate_stats(output, target, args):
     """Calculate statistics including mAP, AUC, etc.
 
     Args:
@@ -24,10 +25,10 @@ def calculate_stats(output, target):
 
     classes_num = target.shape[-1]
     stats = []
+    ap,fps_ap, tps_ap, tps_fps_ap = mean_average_precision(target, output, args.graph_weight_path)
 
-    ap,fps_ap, tps_ap, tps_fps_ap = mean_average_precision(target, output)
-
-    print("ap, fps_ap, tps_ap, tps_fps_ap", np.mean(ap), np.mean(fps_ap), np.mean(tps_ap), np.mean(tps_fps_ap))
+    logging.info("ap %s, fps_ap %s, tps_ap %s, tps_fps_ap %s" % (np.mean(ap), np.mean(fps_ap), np.mean(tps_ap), np.mean(tps_fps_ap)))
+    print("ap %s, fps_ap %s, tps_ap %s, tps_fps_ap %s" % (np.mean(ap), np.mean(fps_ap), np.mean(tps_ap), np.mean(tps_fps_ap)))
 
     # Class-wise statistics
     for k in range(classes_num):

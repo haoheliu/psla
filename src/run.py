@@ -45,6 +45,7 @@ parser.add_argument("--n-print-steps", type=int, default=1, help="number of step
 # model args
 parser.add_argument("--model", type=str, default="efficientnet", help="audio model architecture", choices=["efficientnet", "resnet", "mbnet"])
 parser.add_argument("--dataset", type=str, default="audioset", help="the dataset used", choices=["audioset", "esc50", "speechcommands"])
+parser.add_argument("--graph_weight_path", type=str, default="")
 
 parser.add_argument("--dataset_mean", type=float, default=-4.6476, help="the dataset mean, used for input normalization")
 parser.add_argument("--dataset_std", type=float, default=4.5699, help="the dataset std, used for input normalization")
@@ -74,8 +75,10 @@ parser.add_argument('--bal', help='if use balance sampling', type=ast.literal_ev
 parser.add_argument("--sampler", type=str, default="NeuralSampler")
 parser.add_argument("--preserve_ratio", type=float, default=0.1)
 parser.add_argument("--alpha", type=float, default=1.0, help="The scaling factor to the importance score")
+parser.add_argument("--beta", type=float, default=1.0, help="The scaling factor to the graph weight")
 parser.add_argument("--val_interval", type=int, default=1)
 parser.add_argument("--score_loss", type=bool, default=False)
+parser.add_argument("--reweight_loss", type=bool, default=False)
 
 args = parser.parse_args()
 
@@ -94,21 +97,21 @@ if args.bal == True:
 
     train_loader = torch.utils.data.DataLoader(
         dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf),
-        batch_size=args.batch_size, sampler=sampler, num_workers=args.num_workers, pin_memory=False)
+        batch_size=args.batch_size, sampler=sampler, num_workers=args.num_workers, pin_memory=False, drop_last=True)
 else:
     logging.info('balanced sampler is not used')
     train_loader = torch.utils.data.DataLoader(
         dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf),
-        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=False)
+        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=False, drop_last=True)
 
 val_loader = torch.utils.data.DataLoader(
     dataloaders.AudiosetDataset(args.data_val, label_csv=args.label_csv, audio_conf=val_audio_conf),
-    batch_size=1, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+    batch_size=args.batch_size*2, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=True)
 
 if args.data_eval != None:
     eval_loader = torch.utils.data.DataLoader(
         dataloaders.AudiosetDataset(args.data_eval, label_csv=args.label_csv, audio_conf=val_audio_conf),
-        batch_size=1, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+        batch_size=args.batch_size*2, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=True)
 
 if args.model == 'efficientnet':
     audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha)
@@ -213,7 +216,7 @@ if args.data_eval != None:
         cur_pred = np.loadtxt(args.exp_dir + '/predictions/predictions_eval_' + str(epoch) + '.csv', delimiter=',')
         ensemble_predictions += cur_pred
     ensemble_predictions = ensemble_predictions / args.n_epochs
-    stats = calculate_stats(ensemble_predictions, target)
+    stats = calculate_stats(ensemble_predictions, target, args)
     eval_mAP = np.mean([stat['AP'] for stat in stats])
     eval_mAUC = np.mean([stat['auc'] for stat in stats])
     logging.info("mAP: {:.6f}".format(eval_mAP))

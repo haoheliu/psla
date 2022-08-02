@@ -19,6 +19,7 @@ from torch.cuda.amp import autocast,GradScaler
 import logging
 import pickle
 from tqdm import tqdm
+import torch
 
 def save_pickle(obj,fname):
     print("Save pickle at "+fname)
@@ -31,239 +32,262 @@ def load_pickle(fname):
         res = pickle.load(f)
     return res
 
+GRAPH_WEIGHT = None
+
+def calculate_class_weight(target, graph_weight_path, beta=1):
+    global GRAPH_WEIGHT
+    if(GRAPH_WEIGHT is None):
+        GRAPH_WEIGHT = torch.tensor(np.load(graph_weight_path), requires_grad=False).float().cuda()
+        GRAPH_WEIGHT = GRAPH_WEIGHT ** beta
+        GRAPH_WEIGHT = (GRAPH_WEIGHT/torch.max(GRAPH_WEIGHT)) * 2
+    
+    # Get the distance between each class and samples
+    weight = torch.matmul(target, GRAPH_WEIGHT) 
+    # Normalize the weight using the total label of the target
+    weight = weight/torch.sum(target, dim=1, keepdim=True) 
+    # Normalize the max value to 1.0
+    weight = weight/torch.max(weight, dim=1, keepdim=True)[0]
+    # Update the label of the class that appears in the target
+    # avg_weight = torch.mean(weight, dim=1, keepdim=True)
+
+    # The target value 
+    # new_target = target.clone()
+    # new_target[new_target > 0] = 1.0
+    # new_target = new_target * avg_weight
+    # weight[new_target > 0] = new_target[new_target > 0]
+
+    weight[target > 0] = 1.0
+    return weight
+
 def train(audio_model, train_loader, test_loader, args):
-    try:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        logging.info('running on ' + str(device))
-        torch.set_grad_enabled(True)
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logging.info('running on ' + str(device))
+    torch.set_grad_enabled(True)
 
-        # Initialize all of the statistics we want to keep track of
-        batch_time = AverageMeter()
-        per_sample_time = AverageMeter()
-        data_time = AverageMeter()
-        per_sample_data_time = AverageMeter()
-        loss_meter = AverageMeter()
-        score_loss_meter = AverageMeter()
-        per_sample_dnn_time = AverageMeter()
-        progress = []
-        # best_ensemble_mAP is checkpoint ensemble from the first epoch to the best epoch
-        best_epoch, best_ensemble_epoch, best_mAP, best_acc, best_ensemble_mAP = 0, 0, -np.inf, -np.inf, -np.inf
-        global_step, epoch = 0, 0
-        start_time = time.time()
-        exp_dir = args.exp_dir
+    # Initialize all of the statistics we want to keep track of
+    batch_time = AverageMeter()
+    per_sample_time = AverageMeter()
+    data_time = AverageMeter()
+    per_sample_data_time = AverageMeter()
+    loss_meter = AverageMeter()
+    score_loss_meter = AverageMeter()
+    per_sample_dnn_time = AverageMeter()
+    progress = []
+    # best_ensemble_mAP is checkpoint ensemble from the first epoch to the best epoch
+    best_epoch, best_ensemble_epoch, best_mAP, best_acc, best_ensemble_mAP = 0, 0, -np.inf, -np.inf, -np.inf
+    global_step, epoch = 0, 0
+    start_time = time.time()
+    exp_dir = args.exp_dir
 
-        def _save_progress():
-            progress.append([epoch, global_step, best_epoch, best_mAP, time.time() - start_time])
-            with open("%s/progress.pkl" % exp_dir, "wb") as f:
-                pickle.dump(progress, f)
+    def _save_progress():
+        progress.append([epoch, global_step, best_epoch, best_mAP, time.time() - start_time])
+        with open("%s/progress.pkl" % exp_dir, "wb") as f:
+            pickle.dump(progress, f)
 
-        if not isinstance(audio_model, nn.DataParallel):
-            audio_model = nn.DataParallel(audio_model)
+    if not isinstance(audio_model, nn.DataParallel):
+        audio_model = nn.DataParallel(audio_model)
 
-        if(os.path.exists(os.path.join(args.exp_dir, "models/best_audio_model.pth"))):
-            logging.info("Reloading model params" + os.path.join(args.exp_dir, "models/best_audio_model.pth"))
-            model_checkpoint = torch.load(os.path.join(args.exp_dir, "models/best_audio_model.pth"), map_location="cpu")
-            audio_model.load_state_dict(model_checkpoint)
+    if(os.path.exists(os.path.join(args.exp_dir, "models/best_audio_model.pth"))):
+        logging.info("Reloading model params" + os.path.join(args.exp_dir, "models/best_audio_model.pth"))
+        model_checkpoint = torch.load(os.path.join(args.exp_dir, "models/best_audio_model.pth"), map_location="cpu")
+        audio_model.load_state_dict(model_checkpoint)
 
-        # print("Reloading pretrained audioset model!")
-        # model_checkpoint = torch.load("/media/Disk_HDD/haoheliu/projects/psla/pretrained_models/as_mdl_0_wa.pth", map_location="cpu")
-        # # model_checkpoint = torch.load("/media/Disk_HDD/haoheliu/projects/psla/pretrained_models/as_mdl_0.pth", map_location="cpu")
-        # audio_model.load_state_dict(model_checkpoint)
+    # print("Reloading pretrained audioset model!")
+    # model_checkpoint = torch.load("/media/Disk_HDD/haoheliu/projects/psla/pretrained_models/as_mdl_0_wa.pth", map_location="cpu")
+    # # model_checkpoint = torch.load("/media/Disk_HDD/haoheliu/projects/psla/pretrained_models/as_mdl_0.pth", map_location="cpu")
+    # audio_model.load_state_dict(model_checkpoint)
 
-        audio_model = audio_model.to(device)
-        # Set up the optimizer
-        trainables = [p for p in audio_model.parameters() if p.requires_grad]
-        logging.info('Total parameter number is : {:.3f} million'.format(sum(p.numel() for p in audio_model.parameters()) / 1e6))
-        logging.info('Total trainable parameter number is : {:.3f} million'.format(sum(p.numel() for p in trainables) / 1e6))
-        optimizer = torch.optim.Adam(trainables, args.lr, weight_decay=5e-7, betas=(0.95, 0.999))
-        
-        if(os.path.exists(os.path.join(args.exp_dir, "models/best_optim_state.pth"))):
-            logging.info("Reloading optimizer" + os.path.join(args.exp_dir, "models/best_optim_state.pth"))
-            opt_checkpoint = torch.load(os.path.join(args.exp_dir, "models/best_optim_state.pth"), map_location="cpu")
-            optimizer.load_state_dict(opt_checkpoint)
+    audio_model = audio_model.to(device)
+    # Set up the optimizer
+    trainables = [p for p in audio_model.parameters() if p.requires_grad]
+    logging.info('Total parameter number is : {:.3f} million'.format(sum(p.numel() for p in audio_model.parameters()) / 1e6))
+    logging.info('Total trainable parameter number is : {:.3f} million'.format(sum(p.numel() for p in trainables) / 1e6))
+    optimizer = torch.optim.Adam(trainables, args.lr, weight_decay=5e-7, betas=(0.95, 0.999))
+    
+    if(os.path.exists(os.path.join(args.exp_dir, "models/best_optim_state.pth"))):
+        logging.info("Reloading optimizer" + os.path.join(args.exp_dir, "models/best_optim_state.pth"))
+        opt_checkpoint = torch.load(os.path.join(args.exp_dir, "models/best_optim_state.pth"), map_location="cpu")
+        optimizer.load_state_dict(opt_checkpoint)
 
-        # dataset specific settings
-        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=args.lr_patience, verbose=True)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(args.lrscheduler_start, 1000, 5)), gamma=args.lrscheduler_decay, last_epoch=epoch - 1)
-        main_metrics = args.metrics
-        if args.loss == 'BCE':
-            loss_fn = nn.BCELoss()
-        elif args.loss == 'CE':
-            loss_fn = nn.CrossEntropyLoss()
-        warmup = args.warmup
-        args.loss_fn = loss_fn
-        logging.info('now training with {:s}, main metrics: {:s}, loss function: {:s}, learning rate scheduler: {:s}'.format(str(args.dataset), str(main_metrics), str(loss_fn), str(scheduler)))
-        logging.info('The learning rate scheduler starts at {:d} epoch with decay rate of {:.3f} '.format(args.lrscheduler_start, args.lrscheduler_decay))
+    # dataset specific settings
+    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=args.lr_patience, verbose=True)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(args.lrscheduler_start, 1000, 5)), gamma=args.lrscheduler_decay, last_epoch=epoch - 1)
+    main_metrics = args.metrics
+    if args.loss == 'BCE':
+        loss_fn = nn.BCELoss(reduction="none")
+    elif args.loss == 'CE':
+        loss_fn = nn.CrossEntropyLoss()
+    warmup = args.warmup
+    args.loss_fn = loss_fn
+    logging.info('now training with {:s}, main metrics: {:s}, loss function: {:s}, learning rate scheduler: {:s}'.format(str(args.dataset), str(main_metrics), str(loss_fn), str(scheduler)))
+    logging.info('The learning rate scheduler starts at {:d} epoch with decay rate of {:.3f} '.format(args.lrscheduler_start, args.lrscheduler_decay))
 
-        # epoch += 1
+    # epoch += 1
 
-        logging.info("current #steps=%s, #epochs=%s" % (global_step, epoch))
-        logging.info("start training...")
-        result = np.zeros([args.n_epochs, 10])
+    logging.info("current #steps=%s, #epochs=%s" % (global_step, epoch))
+    logging.info("start training...")
+    result = np.zeros([args.n_epochs, 10])
+    audio_model.train()
+    while epoch < args.n_epochs + 1:
+        print("Epoch:", epoch)
+        begin_time = time.time()
+        end_time = time.time()
         audio_model.train()
-        while epoch < args.n_epochs + 1:
-            print("Epoch:", epoch)
-            begin_time = time.time()
+        logging.info('---------------')
+        logging.info(datetime.datetime.now())
+        logging.info("current #epochs=%s, #steps=%s" % (epoch, global_step))
+
+        for i, (audio_input, labels) in enumerate(train_loader):
+            # if(epoch == 0): 
+            #     print("Perform validation first")
+            #     break
+            B = audio_input.size(0)
+            audio_input = audio_input.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+
+            data_time.update(time.time() - end_time)
+            per_sample_data_time.update((time.time() - end_time) / audio_input.shape[0])
+            dnn_start_time = time.time()
+
+            # first several steps for warm-up
+            if global_step <= 1000 and global_step % 50 == 0 and warmup == True:
+                warm_lr = (global_step / 1000) * args.lr
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = warm_lr
+                logging.info('warm-up learning rate is {:f}'.format(optimizer.param_groups[0]['lr']))
+
+            audio_output, score_loss = audio_model(audio_input)
+
+            if isinstance(loss_fn, torch.nn.CrossEntropyLoss):
+                loss = loss_fn(audio_output, torch.argmax(labels.long(), axis=1))
+            else:
+                epsilon = 1e-7
+                audio_output = torch.clamp(audio_output, epsilon, 1. - epsilon)
+                loss = loss_fn(audio_output, labels)
+                if(args.reweight_loss):
+                    loss_weight = calculate_class_weight(labels, args.graph_weight_path, beta=args.beta)
+                    loss = torch.mean(loss * loss_weight)
+                else:
+                    loss = torch.mean(loss)
+            
+            # optimization if amp is not used
+            optimizer.zero_grad()
+            # logging.info("backward")
+            loss.backward()
+            # logging.info("end backward")
+            optimizer.step()
+
+            # record loss
+            loss_meter.update(loss.item(), B)
+            score_loss_meter.update(score_loss.item(), B)
+            batch_time.update(time.time() - end_time)
+            per_sample_time.update((time.time() - end_time)/audio_input.shape[0])
+            per_sample_dnn_time.update((time.time() - dnn_start_time)/audio_input.shape[0])
+
+            print_step = global_step % args.n_print_steps == 0
+            early_print_step = epoch == 0 and global_step % (args.n_print_steps/10) == 0
+            print_step = print_step or early_print_step
+
+            if print_step and global_step != 0:
+                logging.info('Epoch: [{0}][{1}/{2}]\t'
+                'Per Sample Total Time {per_sample_time.avg:.5f}\t'
+                'Per Sample Data Time {per_sample_data_time.avg:.5f}\t'
+                'Per Sample DNN Time {per_sample_dnn_time.avg:.5f}\t'
+                'Train Loss {loss_meter.avg:.4f}\t'
+                'Score Loss {score_loss_meter.avg:.4f}\t'.format(
+                epoch, i, len(train_loader), per_sample_time=per_sample_time, per_sample_data_time=per_sample_data_time,
+                    per_sample_dnn_time=per_sample_dnn_time, loss_meter=loss_meter, score_loss_meter=score_loss_meter))
+                if np.isnan(loss_meter.avg):
+                    logging.error("training diverged...")
+                    return
+
             end_time = time.time()
-            audio_model.train()
-            logging.info('---------------')
-            logging.info(datetime.datetime.now())
-            logging.info("current #epochs=%s, #steps=%s" % (epoch, global_step))
+            global_step += 1
+        if(epoch % args.val_interval == 0):
+            logging.info('start validation')
+            print('start validation')
+            stats, valid_loss = validate(audio_model, test_loader, args, epoch)
 
-            for i, (audio_input, labels) in enumerate(train_loader):
-                if(epoch == 0): 
-                    print("Perform validation first")
-                    break
-                B = audio_input.size(0)
-                audio_input = audio_input.to(device, non_blocking=True)
-                labels = labels.to(device, non_blocking=True)
+            mAP = np.mean([stat['AP'] for stat in stats])
+            mAUC = np.mean([stat['auc'] for stat in stats])
+            acc = stats[0]['acc']
+            logging.info("mAP %s, mAUC %s, acc %s" % (mAP, mAUC, acc))
+            print("mAP %s, mAUC %s, acc %s" % (mAP, mAUC, acc))
 
-                data_time.update(time.time() - end_time)
-                per_sample_data_time.update((time.time() - end_time) / audio_input.shape[0])
-                dnn_start_time = time.time()
+            # ensemble results
+            if(args.val_interval == 1):
+                ensemble_stats = validate_ensemble(args, epoch)
+                ensemble_mAP = np.mean([stat['AP'] for stat in ensemble_stats])
+                ensemble_mAUC = np.mean([stat['auc'] for stat in ensemble_stats])
+                ensemble_acc = ensemble_stats[0]['acc']
 
-                # first several steps for warm-up
-                if global_step <= 1000 and global_step % 50 == 0 and warmup == True:
-                    warm_lr = (global_step / 1000) * args.lr
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] = warm_lr
-                    logging.info('warm-up learning rate is {:f}'.format(optimizer.param_groups[0]['lr']))
+            middle_ps = [stat['precisions'][int(len(stat['precisions'])/2)] for stat in stats]
+            middle_rs = [stat['recalls'][int(len(stat['recalls'])/2)] for stat in stats]
+            average_precision = np.mean(middle_ps)
+            average_recall = np.mean(middle_rs)
 
-                audio_output, score_loss = audio_model(audio_input)
+            if main_metrics == 'mAP':
+                logging.info("mAP: {:.6f}".format(mAP))
+            else:
+                logging.info("acc: {:.6f}".format(acc))
+            logging.info("AUC: {:.6f}".format(mAUC))
+            logging.info("Avg Precision: {:.6f}".format(average_precision))
+            logging.info("Avg Recall: {:.6f}".format(average_recall))
+            logging.info("d_prime: {:.6f}".format(d_prime(mAUC)))
+            logging.info("train_loss: {:.6f}".format(loss_meter.avg))
+            logging.info("valid_loss: {:.6f}".format(valid_loss))
 
-                if isinstance(loss_fn, torch.nn.CrossEntropyLoss):
-                    loss1 = loss_fn(audio_output, torch.argmax(labels.long(), axis=1))
-                    loss = loss1 # - score_loss
-                    if(score_loss < 0.01 and args.score_loss):
-                        loss = loss - score_loss
-                else:
-                    epsilon = 1e-7
-                    audio_output = torch.clamp(audio_output, epsilon, 1. - epsilon)
-                    loss1 = loss_fn(audio_output, labels)
-                    loss = loss1 # - score_loss
-                    if(score_loss < 0.01 and args.score_loss):
-                        loss = loss - score_loss
-                
-                # optimization if amp is not used
-                optimizer.zero_grad()
-                # logging.info("backward")
-                loss.backward()
-                # logging.info("end backward")
-                optimizer.step()
-
-                # record loss
-                loss_meter.update(loss1.item(), B)
-                score_loss_meter.update(score_loss.item(), B)
-                batch_time.update(time.time() - end_time)
-                per_sample_time.update((time.time() - end_time)/audio_input.shape[0])
-                per_sample_dnn_time.update((time.time() - dnn_start_time)/audio_input.shape[0])
-
-                print_step = global_step % args.n_print_steps == 0
-                early_print_step = epoch == 0 and global_step % (args.n_print_steps/10) == 0
-                print_step = print_step or early_print_step
-
-                if print_step and global_step != 0:
-                    logging.info('Epoch: [{0}][{1}/{2}]\t'
-                    'Per Sample Total Time {per_sample_time.avg:.5f}\t'
-                    'Per Sample Data Time {per_sample_data_time.avg:.5f}\t'
-                    'Per Sample DNN Time {per_sample_dnn_time.avg:.5f}\t'
-                    'Train Loss {loss_meter.avg:.4f}\t'
-                    'Score Loss {score_loss_meter.avg:.4f}\t'.format(
-                    epoch, i, len(train_loader), per_sample_time=per_sample_time, per_sample_data_time=per_sample_data_time,
-                        per_sample_dnn_time=per_sample_dnn_time, loss_meter=loss_meter, score_loss_meter=score_loss_meter))
-                    if np.isnan(loss_meter.avg):
-                        logging.error("training diverged...")
-                        return
-
-                end_time = time.time()
-                global_step += 1
-            if(epoch % args.val_interval == 0):
-                logging.info('start validation')
-                print('start validation')
-                stats, valid_loss = validate(audio_model, test_loader, args, epoch)
-
-                mAP = np.mean([stat['AP'] for stat in stats])
-                mAUC = np.mean([stat['auc'] for stat in stats])
-                acc = stats[0]['acc']
-                print("mAP, mAUC, acc",mAP, mAUC, acc)
-
-                # ensemble results
-                if(args.val_interval == 1):
-                    ensemble_stats = validate_ensemble(args, epoch)
-                    ensemble_mAP = np.mean([stat['AP'] for stat in ensemble_stats])
-                    ensemble_mAUC = np.mean([stat['auc'] for stat in ensemble_stats])
-                    ensemble_acc = ensemble_stats[0]['acc']
-
-                middle_ps = [stat['precisions'][int(len(stat['precisions'])/2)] for stat in stats]
-                middle_rs = [stat['recalls'][int(len(stat['recalls'])/2)] for stat in stats]
-                average_precision = np.mean(middle_ps)
-                average_recall = np.mean(middle_rs)
-
+            if(args.val_interval == 1):
                 if main_metrics == 'mAP':
-                    logging.info("mAP: {:.6f}".format(mAP))
+                    result[epoch-1, :] = [mAP, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_mAP, ensemble_mAUC, optimizer.param_groups[0]['lr']]
                 else:
-                    logging.info("acc: {:.6f}".format(acc))
-                logging.info("AUC: {:.6f}".format(mAUC))
-                logging.info("Avg Precision: {:.6f}".format(average_precision))
-                logging.info("Avg Recall: {:.6f}".format(average_recall))
-                logging.info("d_prime: {:.6f}".format(d_prime(mAUC)))
-                logging.info("train_loss: {:.6f}".format(loss_meter.avg))
-                logging.info("valid_loss: {:.6f}".format(valid_loss))
+                    result[epoch-1, :] = [acc, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_acc, ensemble_mAUC, optimizer.param_groups[0]['lr']]
+                np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
+            logging.info('validation finished')
 
-                if(args.val_interval == 1):
-                    if main_metrics == 'mAP':
-                        result[epoch-1, :] = [mAP, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_mAP, ensemble_mAUC, optimizer.param_groups[0]['lr']]
-                    else:
-                        result[epoch-1, :] = [acc, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_acc, ensemble_mAUC, optimizer.param_groups[0]['lr']]
-                    np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
-                logging.info('validation finished')
+            if mAP > best_mAP:
+                best_mAP = mAP
+                if main_metrics == 'mAP':
+                    best_epoch = epoch
 
-                if mAP > best_mAP:
-                    best_mAP = mAP
-                    if main_metrics == 'mAP':
-                        best_epoch = epoch
+            if acc > best_acc:
+                best_acc = acc
+                if main_metrics == 'acc':
+                    best_epoch = epoch
 
-                if acc > best_acc:
-                    best_acc = acc
-                    if main_metrics == 'acc':
-                        best_epoch = epoch
+            if(args.val_interval == 1):
+                if ensemble_mAP > best_ensemble_mAP:
+                    best_ensemble_epoch = epoch
+                    best_ensemble_mAP = ensemble_mAP
 
-                if(args.val_interval == 1):
-                    if ensemble_mAP > best_ensemble_mAP:
-                        best_ensemble_epoch = epoch
-                        best_ensemble_mAP = ensemble_mAP
+            if best_epoch == epoch:
+                torch.save(audio_model.state_dict(), "%s/models/best_audio_model.pth" % (exp_dir))
+                torch.save(optimizer.state_dict(), "%s/models/best_optim_state.pth" % (exp_dir))
 
-                if best_epoch == epoch:
-                    torch.save(audio_model.state_dict(), "%s/models/best_audio_model.pth" % (exp_dir))
-                    torch.save(optimizer.state_dict(), "%s/models/best_optim_state.pth" % (exp_dir))
+            torch.save(audio_model.state_dict(), "%s/models/audio_model.%d.pth" % (exp_dir, epoch))
+            if len(train_loader.dataset) > 2e5:
+                torch.save(optimizer.state_dict(), "%s/models/optim_state.%d.pth" % (exp_dir, epoch))
 
-                torch.save(audio_model.state_dict(), "%s/models/audio_model.%d.pth" % (exp_dir, epoch))
-                if len(train_loader.dataset) > 2e5:
-                    torch.save(optimizer.state_dict(), "%s/models/optim_state.%d.pth" % (exp_dir, epoch))
+            with open(exp_dir + '/stats_' + str(epoch) +'.pickle', 'wb') as handle:
+                pickle.dump(stats, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            _save_progress()
 
-                with open(exp_dir + '/stats_' + str(epoch) +'.pickle', 'wb') as handle:
-                    pickle.dump(stats, handle, protocol=pickle.HIGHEST_PROTOCOL)
-                _save_progress()
+        scheduler.step()
 
-            scheduler.step()
+        logging.info('Epoch-{0} lr: {1}'.format(epoch, optimizer.param_groups[0]['lr']))
 
-            logging.info('Epoch-{0} lr: {1}'.format(epoch, optimizer.param_groups[0]['lr']))
+        finish_time = time.time()
+        logging.info('epoch {:d} training time: {:.3f}'.format(epoch, finish_time-begin_time))
 
-            finish_time = time.time()
-            logging.info('epoch {:d} training time: {:.3f}'.format(epoch, finish_time-begin_time))
+        epoch += 1
 
-            epoch += 1
-
-            batch_time.reset()
-            per_sample_time.reset()
-            data_time.reset()
-            per_sample_data_time.reset()
-            loss_meter.reset()
-            per_sample_dnn_time.reset()
-    except Exception as e:
-        logging.exception("message")
-        print(e)
-        logging.info("Stop training...")
+        batch_time.reset()
+        per_sample_time.reset()
+        data_time.reset()
+        per_sample_data_time.reset()
+        loss_meter.reset()
+        per_sample_dnn_time.reset()
 
     # if test weight averaging
     if args.wa == True:
@@ -298,6 +322,7 @@ def validate(audio_model, val_loader, args, epoch, eval_target=False):
     A_fname = []
     with torch.no_grad():   
         for i, (audio_input, labels ,fname) in tqdm(enumerate(val_loader)):  
+            batchsize = audio_input.size(0)
             audio_input = audio_input.to(device)    
             # compute output    
             audio_output,_ = audio_model(audio_input) 
@@ -306,13 +331,13 @@ def validate(audio_model, val_loader, args, epoch, eval_target=False):
             A_targets.append(labels)    
             A_fname.append(fname)
             # compute the loss  
-            labels = labels.to(device)  
-            epsilon = 1e-7  
+            labels = labels.to(device)
+            epsilon = 1e-7
             audio_output = torch.clamp(audio_output, epsilon, 1. - epsilon) 
             if isinstance(args.loss_fn, torch.nn.CrossEntropyLoss): 
-                loss = args.loss_fn(audio_output, torch.argmax(labels.long(), axis=1))  
+                loss = torch.mean(args.loss_fn(audio_output, torch.argmax(labels.long(), axis=1)))
             else:   
-                loss = args.loss_fn(audio_output, labels)   
+                loss = torch.mean(args.loss_fn(audio_output, labels))   
             A_loss.append(loss.to('cpu').detach())  
             batch_time.update(time.time() - end)    
             end = time.time()   
@@ -321,15 +346,16 @@ def validate(audio_model, val_loader, args, epoch, eval_target=False):
         target = torch.cat(A_targets)   
         loss = np.mean(A_loss)  
 
-        print("save the model prediction pickle file")
-        output_dict = {}
-        output_dict["audio_name"] = fname[:,0]
-        output_dict["clipwise_output"] = audio_output.cpu().numpy()
-        output_dict["target"] = target.cpu().numpy()
-        path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
-        save_pickle(output_dict, os.path.join(path, "%s_%s.pkl" % (args.sampler, epoch)))
+        if(batchsize == 1):
+            print("save the model prediction pickle file")
+            output_dict = {}
+            output_dict["audio_name"] = fname[:,0]
+            output_dict["clipwise_output"] = audio_output.cpu().numpy()
+            output_dict["target"] = target.cpu().numpy()
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            save_pickle(output_dict, os.path.join(path, "%s_%s.pkl" % (args.sampler, epoch)))
 
-        stats = calculate_stats(audio_output, target)   
+        stats = calculate_stats(audio_output, target, args)   
         # save the prediction here  
         exp_dir = args.exp_dir  
         if os.path.exists(exp_dir+'/predictions') == False: 
@@ -356,7 +382,7 @@ def validate_ensemble(args, epoch):
     ensemble_predictions = ensemble_predictions / epoch
     np.savetxt(exp_dir+'/predictions/ensemble_predictions.csv', ensemble_predictions, delimiter=',')
 
-    stats = calculate_stats(ensemble_predictions, target)
+    stats = calculate_stats(ensemble_predictions, target, args)
     return stats
 
 def validate_wa(audio_model, val_loader, args, start_epoch, end_epoch):
