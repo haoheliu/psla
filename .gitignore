@@ -22,3 +22,4 @@ fairseq
 *.png
 audioset*
 log*
+*.pkl

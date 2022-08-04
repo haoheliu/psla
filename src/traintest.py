@@ -23,7 +23,6 @@ from tqdm import tqdm
 import torch
 from utilities.new_map import *
 
-
 def train(audio_model, train_loader, test_loader, args):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -132,6 +131,7 @@ def train(audio_model, train_loader, test_loader, args):
                 loss = loss_fn(audio_output, labels)
                 if(args.reweight_loss):
                     loss_weight = eval(args.weight_func)(labels, args.graph_weight_path, beta=args.beta)
+                    loss_weight = calculate_class_weight(labels, args.graph_weight_path, beta=args.beta)
                     loss = torch.mean(loss * loss_weight)
                 else:
                     loss = torch.mean(loss)
