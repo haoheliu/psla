@@ -379,6 +379,60 @@ def calculate_class_weight(target, graph_weight_path, beta=1):
 
     return weight
 
+def calculate_class_weight_v12(target, graph_weight_path, beta=1):
+    global GRAPH_WEIGHT
+    if(GRAPH_WEIGHT is None):
+        GRAPH_WEIGHT = torch.tensor(np.load(graph_weight_path), requires_grad=False).float().cuda()
+        GRAPH_WEIGHT = (GRAPH_WEIGHT/torch.max(GRAPH_WEIGHT))
+    # Get the distance between each class and samples
+    weight = torch.matmul(target, GRAPH_WEIGHT**beta) 
+    
+    # Normalize the weight using the total label of the target
+    weight = weight/torch.sum(target, dim=1, keepdim=True) # TODO do we need this?
+
+    # Normalize the max value to 1.0; Remove this line will degrade the mAP from 0.22 to 0.17
+    weight = weight/torch.max(weight, dim=1, keepdim=True)[0] # TODO do we need this?
+
+    # Way 1
+    weight[target > 0] = 1.0
+    # Way 2
+    # max_val = torch.max(weight, dim=1, keepdim=True)[0]
+    # new_weight = weight.clone()
+    
+    # new_weight[target < 1e-8] = 0.0
+    # new_weight[target >= 1e-8] = 1.0
+
+    # new_weight = new_weight * max_val
+    # weight[target > 0] = new_weight[target>0] - weight[target > 0]
+    return weight
+
+def calculate_class_weight_v11(target, graph_weight_path, beta=1):
+    global GRAPH_WEIGHT
+    if(GRAPH_WEIGHT is None):
+        GRAPH_WEIGHT = torch.tensor(np.load(graph_weight_path), requires_grad=False).float().cuda()
+        GRAPH_WEIGHT = (GRAPH_WEIGHT/torch.max(GRAPH_WEIGHT)) * 2
+    # Get the distance between each class and samples
+    weight = torch.matmul(target, GRAPH_WEIGHT**beta) 
+    
+    # Normalize the weight using the total label of the target
+    weight = weight/torch.sum(target, dim=1, keepdim=True) # TODO do we need this?
+
+    # Normalize the max value to 1.0; Remove this line will degrade the mAP from 0.22 to 0.17
+    # weight = weight/torch.max(weight, dim=1, keepdim=True)[0] # TODO do we need this?
+
+    # Way 1
+    # weight[target > 0] = 1.0
+    # Way 2
+    max_val = torch.max(weight, dim=1, keepdim=True)[0]
+    new_weight = weight.clone()
+    
+    new_weight[target < 1e-8] = 0.0
+    new_weight[target >= 1e-8] = 1.0
+
+    new_weight = new_weight * max_val
+    weight[target > 0] = new_weight[target>0] - weight[target > 0]
+    return weight
+
 def calculate_class_weight_v10(target, graph_weight_path, beta=1):
     global GRAPH_WEIGHT
     if(GRAPH_WEIGHT is None):
@@ -404,7 +458,6 @@ def calculate_class_weight_v10(target, graph_weight_path, beta=1):
 
     # new_weight = new_weight * max_val
     # weight[target > 0] = new_weight[target>0] - weight[target > 0]
-
     return weight
 
 def calculate_class_weight_v9(target, graph_weight_path, beta=1):
@@ -666,7 +719,7 @@ def test_class_weight(index):
     target = torch.zeros((1, 527)).cuda()
     target[0,index] = 1.0
     weight_1 = calculate_class_weight_v10(target, graph_weight_path=graph_weight_path, beta=1.0)
-    weight_2 = calculate_class_weight(target, graph_weight_path=graph_weight_path, beta=2.0)
+    weight_2 = calculate_class_weight_v12(target, graph_weight_path=graph_weight_path, beta=1.0)
     plt.plot(weight_1[0].cpu().numpy())
     plt.plot(weight_2[0].cpu().numpy())
     

@@ -136,6 +136,10 @@ def train(audio_model, train_loader, test_loader, args):
                 else:
                     loss = torch.mean(loss)
             
+            # Can this work?
+            if(score_loss < 0.01):
+                loss = loss - score_loss
+            
             # optimization if amp is not used
             optimizer.zero_grad()
             # logging.info("backward")
