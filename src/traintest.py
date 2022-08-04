@@ -6,6 +6,7 @@
 # @File    : traintest.py
 
 import sys
+sys.path.append("/media/Disk_HDD/haoheliu/projects/psla/src")
 import os
 import datetime
 sys.path.append(os.path.dirname(os.path.dirname(sys.path[0])))
@@ -20,44 +21,8 @@ import logging
 import pickle
 from tqdm import tqdm
 import torch
+from utilities.new_map import *
 
-def save_pickle(obj,fname):
-    print("Save pickle at "+fname)
-    with open(fname,'wb') as f:
-        pickle.dump(obj,f)
-
-def load_pickle(fname):
-    print("Load pickle at "+fname)
-    with open(fname,'rb') as f:
-        res = pickle.load(f)
-    return res
-
-GRAPH_WEIGHT = None
-
-def calculate_class_weight(target, graph_weight_path, beta=1):
-    global GRAPH_WEIGHT
-    if(GRAPH_WEIGHT is None):
-        GRAPH_WEIGHT = torch.tensor(np.load(graph_weight_path), requires_grad=False).float().cuda()
-        GRAPH_WEIGHT = GRAPH_WEIGHT ** beta
-        GRAPH_WEIGHT = (GRAPH_WEIGHT/torch.max(GRAPH_WEIGHT)) * 2
-    
-    # Get the distance between each class and samples
-    weight = torch.matmul(target, GRAPH_WEIGHT) 
-    # Normalize the weight using the total label of the target
-    weight = weight/torch.sum(target, dim=1, keepdim=True) 
-    # Normalize the max value to 1.0
-    weight = weight/torch.max(weight, dim=1, keepdim=True)[0]
-    # Update the label of the class that appears in the target
-    # avg_weight = torch.mean(weight, dim=1, keepdim=True)
-
-    # The target value 
-    # new_target = target.clone()
-    # new_target[new_target > 0] = 1.0
-    # new_target = new_target * avg_weight
-    # weight[new_target > 0] = new_target[new_target > 0]
-
-    weight[target > 0] = 1.0
-    return weight
 
 def train(audio_model, train_loader, test_loader, args):
     
@@ -166,7 +131,7 @@ def train(audio_model, train_loader, test_loader, args):
                 audio_output = torch.clamp(audio_output, epsilon, 1. - epsilon)
                 loss = loss_fn(audio_output, labels)
                 if(args.reweight_loss):
-                    loss_weight = calculate_class_weight(labels, args.graph_weight_path, beta=args.beta)
+                    loss_weight = eval(args.weight_func)(labels, args.graph_weight_path, beta=args.beta)
                     loss = torch.mean(loss * loss_weight)
                 else:
                     loss = torch.mean(loss)
