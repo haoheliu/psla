@@ -103,9 +103,6 @@ def train(audio_model, train_loader, test_loader, args):
         logging.info("current #epochs=%s, #steps=%s" % (epoch, global_step))
 
         for i, (audio_input, labels) in enumerate(train_loader):
-            # if(epoch == 0): 
-            #     print("Perform validation first")
-            #     break
             B = audio_input.size(0)
             audio_input = audio_input.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)

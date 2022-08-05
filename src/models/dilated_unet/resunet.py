@@ -42,16 +42,16 @@ class ConvBlockRes(nn.Module):
 
         self.activation = activation
         if(type(size) == type((3,4))):
-            pad = size[0] // 2
+            pad = 1+size[0] // 2
             size = size[0]
         else:
-            pad = size // 2
+            pad = 1+size // 2
             size = size
 
         self.conv1 = nn.Conv2d(in_channels=in_channels,
                                out_channels=out_channels,
                                kernel_size=(size, size), stride=(1, 1),
-                               dilation=(1, 1), padding=(pad, pad), bias=False)
+                               dilation=(2, 2), padding=(pad, pad), bias=False)
 
         self.bn1 = nn.BatchNorm2d(in_channels, momentum=momentum)
         # self.abn1 = InPlaceABN(num_features=in_channels, momentum=momentum, activation='leaky_relu')
@@ -59,7 +59,7 @@ class ConvBlockRes(nn.Module):
         self.conv2 = nn.Conv2d(in_channels=out_channels,
                                out_channels=out_channels,
                                kernel_size=(size, size), stride=(1, 1),
-                               dilation=(1, 1), padding=(pad, pad), bias=False)
+                               dilation=(2, 2), padding=(pad, pad), bias=False)
 
         self.bn2 = nn.BatchNorm2d(out_channels, momentum=momentum)
 
@@ -67,7 +67,7 @@ class ConvBlockRes(nn.Module):
 
         if in_channels != out_channels:
             self.shortcut = nn.Conv2d(in_channels=in_channels,
-                                      out_channels=out_channels, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
+                                      out_channels=out_channels, kernel_size=(1, 1), stride=(1, 1), padding=(0,0))
             self.is_shortcut = True
         else:
             self.is_shortcut = False
@@ -438,5 +438,6 @@ class UNetResComplex_100Mb_6(nn.Module):
 
 if __name__ == "__main__":
     model = UNetResComplex_100Mb_6(channels=1, scale=0.25)
+    print(model)
     data = torch.randn((1, 1, 1056, 128))
     print(model(data).size())
