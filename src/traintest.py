@@ -22,6 +22,7 @@ import pickle
 from tqdm import tqdm
 import torch
 from utilities.new_map import *
+import wandb
 
 def train(audio_model, train_loader, test_loader, args):
     
@@ -43,7 +44,7 @@ def train(audio_model, train_loader, test_loader, args):
     global_step, epoch = 0, 0
     start_time = time.time()
     exp_dir = args.exp_dir
-
+    
     def _save_progress():
         progress.append([epoch, global_step, best_epoch, best_mAP, time.time() - start_time])
         with open("%s/progress.pkl" % exp_dir, "wb") as f:
@@ -87,7 +88,7 @@ def train(audio_model, train_loader, test_loader, args):
     logging.info('now training with {:s}, main metrics: {:s}, loss function: {:s}, learning rate scheduler: {:s}'.format(str(args.dataset), str(main_metrics), str(loss_fn), str(scheduler)))
     logging.info('The learning rate scheduler starts at {:d} epoch with decay rate of {:.3f} '.format(args.lrscheduler_start, args.lrscheduler_decay))
 
-    # epoch += 1
+    epoch += 1
 
     logging.info("current #steps=%s, #epochs=%s" % (global_step, epoch))
     logging.info("start training...")
@@ -134,7 +135,7 @@ def train(audio_model, train_loader, test_loader, args):
                     loss = torch.mean(loss)
             
             # Can this work?
-            if(score_loss < 0.01):
+            if(args.score_loss and score_loss < args.score_loss_threshold):
                 loss = loss - score_loss
             
             # optimization if amp is not used
@@ -156,6 +157,14 @@ def train(audio_model, train_loader, test_loader, args):
             print_step = print_step or early_print_step
 
             if print_step and global_step != 0:
+                info = {
+                "train-loss":float(loss_meter.avg),
+                "score-loss":float(score_loss_meter.avg),
+                "speed-data":float(per_sample_data_time.avg),
+                "speed-total":float(per_sample_time.avg),
+                "speed-dnn":float(per_sample_dnn_time.avg)}
+
+                wandb.log(info, step=global_step)
                 logging.info('Epoch: [{0}][{1}/{2}]\t'
                 'Per Sample Total Time {per_sample_time.avg:.5f}\t'
                 'Per Sample Data Time {per_sample_data_time.avg:.5f}\t'
@@ -180,7 +189,8 @@ def train(audio_model, train_loader, test_loader, args):
             acc = stats[0]['acc']
             logging.info("mAP %s, mAUC %s, acc %s" % (mAP, mAUC, acc))
             print("mAP %s, mAUC %s, acc %s" % (mAP, mAUC, acc))
-
+            val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc}
+            wandb.log(val_info, step=global_step)
             # ensemble results
             if(args.val_interval == 1):
                 ensemble_stats = validate_ensemble(args, epoch)

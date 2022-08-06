@@ -23,3 +23,8 @@ fairseq
 audioset*
 log*
 *.pkl
+condor*log
+docker_stderror
+rsync.submitfile
+submit.submitfile
+submit.log

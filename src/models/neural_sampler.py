@@ -17,9 +17,9 @@ import os
 # from pooling import Pooling_layer
 # from transformerencoder.model import TextEncoder
 
-# from .HigherModels import *
-# from .neural_sampler import *
-# from .pooling import Pooling_layer
+from .HigherModels import *
+from .neural_sampler import *
+from .pooling import Pooling_layer
 
 POS_EMB_REQUIRES_GRAD=False
 

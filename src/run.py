@@ -19,9 +19,7 @@ import ast
 from torch.utils.data import WeightedRandomSampler
 import numpy as np
 import logging
-
-logging.info("I am process %s, running on %s: starting (%s)" % (
-        os.getpid(), os.uname()[1], time.asctime()))
+import wandb
 
 # I/O args
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -44,7 +42,7 @@ parser.add_argument("--n-print-steps", type=int, default=1, help="number of step
 
 # model args
 parser.add_argument("--model", type=str, default="efficientnet", help="audio model architecture", choices=["efficientnet", "resnet", "mbnet"])
-parser.add_argument("--dataset", type=str, default="audioset", help="the dataset used", choices=["audioset", "esc50", "speechcommands"])
+parser.add_argument("--dataset", type=str, default="audioset", help="the dataset used", choices=["audioset", "esc50", "speechcommands","fsd50k","audiosetbalanced"])
 parser.add_argument("--graph_weight_path", type=str, default="")
 
 parser.add_argument("--dataset_mean", type=float, default=-4.6476, help="the dataset mean, used for input normalization")
@@ -75,6 +73,7 @@ parser.add_argument('--bal', help='if use balance sampling', type=ast.literal_ev
 parser.add_argument("--sampler", type=str, default="NeuralSampler")
 parser.add_argument("--weight_func", type=str, default="")
 parser.add_argument("--preserve_ratio", type=float, default=0.1)
+parser.add_argument("--score_loss_threshold", type=float, default=0.01)
 parser.add_argument("--alpha", type=float, default=1.0, help="The scaling factor to the importance score")
 parser.add_argument("--beta", type=float, default=1.0, help="The scaling factor to the graph weight")
 parser.add_argument("--val_interval", type=int, default=1)
@@ -82,6 +81,31 @@ parser.add_argument("--score_loss", type=bool, default=False)
 parser.add_argument("--reweight_loss", type=bool, default=False)
 
 args = parser.parse_args()
+
+config = vars(args)
+
+wandb.init(
+  project="iclr2023",
+  name=os.path.basename(args.exp_dir),
+  notes="Debug",
+  tags=[args.sampler],
+  config=config,
+)
+
+# Remove all handlers associated with the root logger object.
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+logging.basicConfig(
+    filename="%s/log.txt" % args.exp_dir,
+    filemode="a",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s: %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
+
+logging.info("I am process %s, running on %s: starting (%s)" % (
+        os.getpid(), os.uname()[1], time.asctime()))
 
 audio_conf = {'num_mel_bins': 128, 'target_length': args.target_length, 'freqm': args.freqm,
               'timem': args.timem, 'mixup': args.mixup, 'dataset': args.dataset, 'mode': 'train',
@@ -95,15 +119,18 @@ if args.bal == True:
     logging.info('balanced sampler is being used')
     samples_weight = np.loadtxt(args.data_train[:-5] + '_weight.csv', delimiter=',')
     sampler = WeightedRandomSampler(samples_weight, len(samples_weight), replacement=True)
-
+    dataset = dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf)
     train_loader = torch.utils.data.DataLoader(
-        dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf),
+        dataset,
         batch_size=args.batch_size, sampler=sampler, num_workers=args.num_workers, pin_memory=False, drop_last=True)
+    logging.info("The length of the dataset is %s, the length of the dataloader is %s, the batchsize is %s" % (len(dataset), len(train_loader), args.batch_size))
 else:
     logging.info('balanced sampler is not used')
+    dataset = dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf)
     train_loader = torch.utils.data.DataLoader(
-        dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf),
+        dataset,
         batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=False, drop_last=True)
+    logging.info("The length of the dataset is %s, the length of the dataloader is %s, the batchsize is %s" % (len(dataset), len(train_loader), args.batch_size))
 
 val_loader = torch.utils.data.DataLoader(
     dataloaders.AudiosetDataset(args.data_val, label_csv=args.label_csv, audio_conf=val_audio_conf),
@@ -121,6 +148,9 @@ elif args.model == 'resnet':
 elif args.model == 'mbnet':
     audio_model = models.MBNet(label_dim=args.n_class, pretrain=args.effpretrain)
 
+wandb.watch(
+    audio_model, criterion=None, log="all", log_freq=100, idx=None, log_graph=True
+)
 # if you want to use a pretrained model for fine-tuning, uncomment here.
 # if not isinstance(audio_model, nn.DataParallel):
 #     audio_model = nn.DataParallel(audio_model)
@@ -140,26 +170,14 @@ if os.path.exists("%s/models" % args.exp_dir) == False:
 with open("%s/args.pkl" % args.exp_dir, "wb") as f:
     pickle.dump(args, f)
 
-# Remove all handlers associated with the root logger object.
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
-
-logging.basicConfig(
-    filename="%s/log.txt" % args.exp_dir,
-    filemode="a",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s: %(message)s",
-    datefmt="%m/%d/%Y %I:%M:%S %p",
-)
-
 logging.info("Initializing...")
 train(audio_model, train_loader, val_loader, args)
 
 # if the dataset has a seperate evaluation set (e.g., FSD50K), then select the model using the validation set and eval on the evaluation set.
 logging.info('---------------Result Summary---------------')
+info = {}
 if args.data_eval != None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # evaluate best single model
     sd = torch.load(args.exp_dir + '/models/best_audio_model.pth', map_location=device)
     if not isinstance(audio_model, nn.DataParallel):
@@ -171,12 +189,16 @@ if args.data_eval != None:
     val_mAUC = np.mean([stat['auc'] for stat in stats])
     logging.info("mAP: {:.6f}".format(val_mAP))
     logging.info("AUC: {:.6f}".format(val_mAUC))
+    info["mAP/val_single"]=val_mAP
+    info["AUC/val_single"]=val_mAUC
     logging.info('---------------evaluate best single model on the evaluation set---------------')
     stats, _ = validate(audio_model, eval_loader, args, 'best_single_eval_set', eval_target=True)
     eval_mAP = np.mean([stat['AP'] for stat in stats])
     eval_mAUC = np.mean([stat['auc'] for stat in stats])
     logging.info("mAP: {:.6f}".format(eval_mAP))
     logging.info("AUC: {:.6f}".format(eval_mAUC))
+    info["mAP/eval_single"]=eval_mAP
+    info["AUC/eval_single"]=eval_mAUC
     np.savetxt(args.exp_dir + '/best_single_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC])
 
     # evaluate weight average model
@@ -188,12 +210,16 @@ if args.data_eval != None:
     val_mAUC = np.mean([stat['auc'] for stat in stats])
     logging.info("mAP: {:.6f}".format(val_mAP))
     logging.info("AUC: {:.6f}".format(val_mAUC))
+    info["mAP/val_wa"]=val_mAP
+    info["AUC/val_wa"]=val_mAUC
     logging.info('---------------evaluate weight averages model on the evaluation set---------------')
     stats, _ = validate(audio_model, eval_loader, args, 'wa_eval_set')
     eval_mAP = np.mean([stat['AP'] for stat in stats])
     eval_mAUC = np.mean([stat['auc'] for stat in stats])
     logging.info("mAP: {:.6f}".format(eval_mAP))
     logging.info("AUC: {:.6f}".format(eval_mAUC))
+    info["mAP/eval_wa"]=eval_mAP
+    info["AUC/eval_wa"]=eval_mAUC
     np.savetxt(args.exp_dir + '/wa_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC])
 
     # evaluate the ensemble results
@@ -204,6 +230,8 @@ if args.data_eval != None:
     val_mAUC = result[-1, -2]
     logging.info("mAP: {:.6f}".format(val_mAP))
     logging.info("AUC: {:.6f}".format(val_mAUC))
+    info["mAP/val_ensemble"]=val_mAP
+    info["AUC/val_ensemble"]=val_mAUC
     logging.info('---------------evaluate ensemble model on the evaluation set---------------')
     # get the prediction of each checkpoint model
     for epoch in range(1, args.n_epochs+1):
@@ -222,6 +250,8 @@ if args.data_eval != None:
     eval_mAUC = np.mean([stat['auc'] for stat in stats])
     logging.info("mAP: {:.6f}".format(eval_mAP))
     logging.info("AUC: {:.6f}".format(eval_mAUC))
+    info["mAP/eval_ensemble"]=eval_mAP
+    info["AUC/eval_ensemble"]=eval_mAUC
     np.savetxt(args.exp_dir + '/ensemble_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC])
 
 # if the dataset only has evaluation set (no validation set), e.g., AudioSet
@@ -235,6 +265,8 @@ else:
     eval_mAUC = last_five_epoch_mean[1]
     logging.info("mAP: {:.6f}".format(eval_mAP))
     logging.info("AUC: {:.6f}".format(eval_mAUC))
+    info["mAP/2_eval_single"]=eval_mAP
+    info["AUC/2_eval_single"]=eval_mAUC
     np.savetxt(args.exp_dir + '/best_single_result.csv', [eval_mAP, eval_mAUC])
 
     # evaluate weight average model
@@ -245,6 +277,8 @@ else:
     wa_mAUC = result[1]
     logging.info("mAP: {:.6f}".format(wa_mAP))
     logging.info("AUC: {:.6f}".format(wa_mAUC))
+    info["mAP/2_eval_wa"]=wa_mAP
+    info["AUC/2_eval_wa"]=wa_mAUC
     np.savetxt(args.exp_dir + '/wa_result.csv', [wa_mAP, wa_mAUC])
 
     # evaluate ensemble
@@ -255,4 +289,13 @@ else:
     ensemble_mAUC = result[-1, -2]
     logging.info("mAP: {:.6f}".format(ensemble_mAP))
     logging.info("AUC: {:.6f}".format(ensemble_mAUC))
+    info["mAP/2_eval_ensemble"]=ensemble_mAP
+    info["AUC/2_eval_ensemble"]=ensemble_mAUC
     np.savetxt(args.exp_dir + '/ensemble_result.csv', [ensemble_mAP, ensemble_mAUC])
+
+# Log the result
+wandb.log_artifact(os.path.join(args.exp_dir,"log.txt"), name='logging_file', type='txt') 
+for k in info.keys(): info[k] = float(info[k])
+print(info)
+wandb.log(info)
+wandb.finish()

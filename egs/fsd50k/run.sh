@@ -19,7 +19,7 @@ model=efficientnet
 psla=True
 eff_b=7
 batch_size=8
-
+dataset=fsd50k
 # pooling=False
 
 # if [ $pooling == True ]
@@ -60,7 +60,7 @@ lrscheduler_start=10
 
 for sampler in NeuralSamplerPosEmbLearnableLargeEnergy NeuralSamplerPosEmbLearnableLargeEnergyNN NeuralSamplerPosEmbLearnableLargeEnergy 
 do
-exp_dir=./exp/${date}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
+exp_dir=./exp/${date}-${dataset}-${sampler}-${preserve_ratio}-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
 # exp_dir=./exp/avg-pool-0.1-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
 mkdir -p $exp_dir
 
