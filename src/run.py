@@ -90,6 +90,7 @@ config = vars(args)
 
 wandb.init(
   project="iclr2023",
+  mode="disabled", # TODO
   name=os.path.basename(args.exp_dir),
   notes="Debug",
   tags=[args.sampler],
@@ -155,12 +156,17 @@ elif args.model == 'mbnet':
 # wandb.watch(
 #     audio_model, criterion=None, log="all", log_freq=100, idx=None, log_graph=True
 # )
+
 # if you want to use a pretrained model for fine-tuning, uncomment here.
-# if not isinstance(audio_model, nn.DataParallel):
-#     audio_model = nn.DataParallel(audio_model)
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# sd = torch.load('../pretrained_models/as_mdl_0.pth', map_location=device)
-# audio_model.load_state_dict(sd, strict=False)
+if("audioset" not in args.dataset):
+    if not isinstance(audio_model, nn.DataParallel):
+        audio_model = nn.DataParallel(audio_model)
+
+    print("Reloading model trained on audioset, mAP 0.4329")
+    logging.info("Reloading model trained on audioset, mAP 0.4329")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    sd = torch.load('../../pretrained_models/as_mdl_0_wa.pth', map_location=device)
+    audio_model.load_state_dict(sd, strict=False)
 
 if not bool(args.exp_dir):
     logging.info("exp_dir not specified, automatically naming one...")

@@ -34,6 +34,6 @@ request_memory = 32G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
-queue 1 type in NeuralSamplerSpecPool
-# ,NeuralSamplerAvgMaxPool,NeuralSamplerDNNZeroPos,NeuralSamplerDNNFreezePos,NeuralSamplerEnergyNNZeroPos,NeuralSamplerEnergyNNFreezePos,NeuralSamplerLargeEnergyNNZeroPos,NeuralSamplerLargeEnergyNNFreezePos,NeuralSamplerXLargeEnergyNNZeroPos,NeuralSamplerXLargeEnergyNNFreezePos
+queue 1 type in NeuralSamplerLargeEnergy
+# NeuralSamplerSpecPool,NeuralSamplerAvgMaxPool,NeuralSamplerDNNFreezePos,NeuralSamplerEnergyNNFreezePos,NeuralSamplerLargeEnergyNNFreezePos,NeuralSamplerXLargeEnergyNNFreezePos
 # -----------------------------------

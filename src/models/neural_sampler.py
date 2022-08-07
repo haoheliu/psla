@@ -1287,6 +1287,42 @@ class NeuralSamplerDNNZeroPos(nn.Module):
         alpha = torch.sum(weight, dim=1, keepdim=True)
         return weight/(alpha+1e-8)
 
+class NeuralSamplerUniformPool(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+        super(NeuralSamplerUniformPool, self).__init__()
+        self.feature_channels=1
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.use_pos_emb = False
+        self.pooling = Pooling_layer(pooling_type="uniform", factor=preserve_ratio)
+        
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding")
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=False)
+    
+    def forward(self, x):
+        ret={}
+        feature = self.pooling(x.unsqueeze(1))
+        ret['score_loss']=torch.tensor([0.0]).cuda()
+        ret['feature']=feature
+        ret['x']=x
+        return ret
+
+    def visualize(self, ret):
+        x, y = ret['x'], ret['feature']
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            plt.figure(figsize=(6, 8))
+            plt.subplot(211)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(212)
+            plt.imshow(y[i,0,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
 class NeuralSamplerAvgMaxPool(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
         super(NeuralSamplerAvgMaxPool, self).__init__()
@@ -3197,20 +3233,20 @@ if __name__ == "__main__":
 
     # test_feature_single()
     # test_select_feature()
-    test_sampler(NeuralSamplerXLargeEnergyNNFreezePos)
-    test_sampler(NeuralSamplerXLargeEnergyNNZeroPos)
-    test_sampler(NeuralSamplerLargeEnergyNNFreezePos)
-    test_sampler(NeuralSamplerLargeEnergyNNZeroPos)
-    test_sampler(NeuralSamplerEnergyNNFreezePos)
-    test_sampler(NeuralSamplerEnergyNNZeroPos)
-    test_sampler(NeuralSamplerDNNFreezePos)
-    test_sampler(NeuralSamplerDNNZeroPos)
-    test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_25)
-    test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_25)
-    test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25)
-    test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_5)
-    test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_5)
-    test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_5)
+    test_sampler(NeuralSamplerUniformPool)
+    # test_sampler(NeuralSamplerXLargeEnergyNNZeroPos)
+    # test_sampler(NeuralSamplerLargeEnergyNNFreezePos)
+    # test_sampler(NeuralSamplerLargeEnergyNNZeroPos)
+    # test_sampler(NeuralSamplerEnergyNNFreezePos)
+    # test_sampler(NeuralSamplerEnergyNNZeroPos)
+    # test_sampler(NeuralSamplerDNNFreezePos)
+    # test_sampler(NeuralSamplerDNNZeroPos)
+    # test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_25)
+    # test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_25)
+    # test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25)
+    # test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_5)
+    # test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_5)
+    # test_sampler(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_5)
 
 
     # test_sampler(NeuralSamplerNoFakeSoftmax)                                                # Better than NeuralSampler
