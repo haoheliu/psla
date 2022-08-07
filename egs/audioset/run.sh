@@ -44,9 +44,9 @@ then
   trpath=./data/datafiles/audioset_bal_train_data.json
   # original set
   #trpath=./datafiles/balanced_train_data.json
-  epoch=90
+  epoch=100
   wa_start=41
-  wa_end=90
+  wa_end=100
   lrscheduler_start=50
 elif [ "$subset" = "full" ]
 then
@@ -65,7 +65,34 @@ else
   exit 1
 fi
 
-preserve_ratio=0.1
+#############################################
+# preserve_ratio=0.1
+# batch_size=96
+# alpha=1.0
+# beta=1.0
+# graph_weight_path=undirected_graph_connectivity_no_root.npy
+# reweight_loss=False
+# full_bal=True
+# weight_func=calculate_class_weight_v10
+# score_loss=True
+# score_loss_threshold=0.01
+# date=$(date '+%Y-%m-%d-%H-%M')
+# sampler=$1
+
+# echo $sampler
+# exp_dir=./exp/${date}-${dataset}-${sampler}-alpha${alpha}-beta${beta}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+# mkdir -p $exp_dir
+# CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./data/datafiles/audioset_eval_data.json \
+# --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv ./data/class_labels_indices.csv \
+# --n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+# --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+# --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+# --dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+# --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+# --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss ${score_loss} --score_loss_threshold ${score_loss_threshold} --val_interval 1 \
+# --alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --reweight_loss ${reweight_loss} --weight_func ${weight_func} --dataset ${dataset}
+#############################################
+preserve_ratio=0.05
 batch_size=96
 alpha=1.0
 beta=1.0
@@ -90,4 +117,166 @@ CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val .
 --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
 --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss ${score_loss} --score_loss_threshold ${score_loss_threshold} --val_interval 1 \
 --alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --reweight_loss ${reweight_loss} --weight_func ${weight_func} --dataset ${dataset}
+#############################################
+preserve_ratio=0.025
+batch_size=96
+alpha=1.0
+beta=1.0
+graph_weight_path=undirected_graph_connectivity_no_root.npy
+reweight_loss=False
+full_bal=True
+weight_func=calculate_class_weight_v10
+score_loss=True
+score_loss_threshold=0.01
+date=$(date '+%Y-%m-%d-%H-%M')
+sampler=$1
+
+echo $sampler
+exp_dir=./exp/${date}-${dataset}-${sampler}-alpha${alpha}-beta${beta}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv ./data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss ${score_loss} --score_loss_threshold ${score_loss_threshold} --val_interval 1 \
+--alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --reweight_loss ${reweight_loss} --weight_func ${weight_func} --dataset ${dataset}
+#############################################
+preserve_ratio=0.2
+batch_size=64
+alpha=1.0
+beta=1.0
+graph_weight_path=undirected_graph_connectivity_no_root.npy
+reweight_loss=False
+full_bal=True
+weight_func=calculate_class_weight_v10
+score_loss=True
+score_loss_threshold=0.01
+date=$(date '+%Y-%m-%d-%H-%M')
+sampler=$1
+
+echo $sampler
+exp_dir=./exp/${date}-${dataset}-${sampler}-alpha${alpha}-beta${beta}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv ./data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss ${score_loss} --score_loss_threshold ${score_loss_threshold} --val_interval 1 \
+--alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --reweight_loss ${reweight_loss} --weight_func ${weight_func} --dataset ${dataset}
+
+
+# Use re-weighting
+
+
+#############################################
+preserve_ratio=0.1
+batch_size=96
+alpha=1.0
+beta=1.0
+graph_weight_path=undirected_graph_connectivity_no_root.npy
+reweight_loss=True
+full_bal=True
+weight_func=calculate_class_weight_v10
+score_loss=True
+score_loss_threshold=0.01
+date=$(date '+%Y-%m-%d-%H-%M')
+sampler=$1
+
+echo $sampler
+exp_dir=./exp/${date}-${dataset}-${sampler}-alpha${alpha}-beta${beta}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv ./data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss ${score_loss} --score_loss_threshold ${score_loss_threshold} --val_interval 1 \
+--alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --reweight_loss ${reweight_loss} --weight_func ${weight_func} --dataset ${dataset}
+#############################################
+preserve_ratio=0.05
+batch_size=96
+alpha=1.0
+beta=1.0
+graph_weight_path=undirected_graph_connectivity_no_root.npy
+reweight_loss=True
+full_bal=True
+weight_func=calculate_class_weight_v10
+score_loss=True
+score_loss_threshold=0.01
+date=$(date '+%Y-%m-%d-%H-%M')
+sampler=$1
+
+echo $sampler
+exp_dir=./exp/${date}-${dataset}-${sampler}-alpha${alpha}-beta${beta}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv ./data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss ${score_loss} --score_loss_threshold ${score_loss_threshold} --val_interval 1 \
+--alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --reweight_loss ${reweight_loss} --weight_func ${weight_func} --dataset ${dataset}
+#############################################
+preserve_ratio=0.025
+batch_size=96
+alpha=1.0
+beta=1.0
+graph_weight_path=undirected_graph_connectivity_no_root.npy
+reweight_loss=True
+full_bal=True
+weight_func=calculate_class_weight_v10
+score_loss=True
+score_loss_threshold=0.01
+date=$(date '+%Y-%m-%d-%H-%M')
+sampler=$1
+
+echo $sampler
+exp_dir=./exp/${date}-${dataset}-${sampler}-alpha${alpha}-beta${beta}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv ./data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss ${score_loss} --score_loss_threshold ${score_loss_threshold} --val_interval 1 \
+--alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --reweight_loss ${reweight_loss} --weight_func ${weight_func} --dataset ${dataset}
+#############################################
+preserve_ratio=0.2
+batch_size=64
+alpha=1.0
+beta=1.0
+graph_weight_path=undirected_graph_connectivity_no_root.npy
+reweight_loss=True
+full_bal=True
+weight_func=calculate_class_weight_v10
+score_loss=True
+score_loss_threshold=0.01
+date=$(date '+%Y-%m-%d-%H-%M')
+sampler=$1
+
+echo $sampler
+exp_dir=./exp/${date}-${dataset}-${sampler}-alpha${alpha}-beta${beta}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-git-{$RANDOM}
+mkdir -p $exp_dir
+CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./data/datafiles/audioset_eval_data.json \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv ./data/class_labels_indices.csv \
+--n_class 527 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 \
+--dataset_mean -4.6476 --dataset_std 4.5699 --target_length 1056 --noise False \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 \
+--wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio}  --score_loss ${score_loss} --score_loss_threshold ${score_loss_threshold} --val_interval 1 \
+--alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --reweight_loss ${reweight_loss} --weight_func ${weight_func} --dataset ${dataset}
+
 

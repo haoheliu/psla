@@ -275,9 +275,9 @@ def build_ontology_tps_sample_weight(target, weight, class_idx):
     # Otherwise, the ret value of i-th element will be the confidence that class_idx can be counted as positive
     return ret
 
-def build_tps_fps_weight(target, weight, graph_weight_path):
+def build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio):
     fps_tps_lookup = {}
-    save_path = graph_weight_path+"fps_tps_lookup.pkl"
+    save_path = graph_weight_path+"_%s_fps_tps_lookup.pkl" % str(preserve_ratio)
     if(not os.path.exists(save_path)):
         for i in tqdm(range(target.shape[1])):
             # For each class
@@ -290,10 +290,10 @@ def build_tps_fps_weight(target, weight, graph_weight_path):
         fps_tps_lookup = load_pickle(save_path)
     return fps_tps_lookup
 
-def mean_average_precision(target, clipwise_output, graph_weight_path, new_metric=True):
+def mean_average_precision(target, clipwise_output, graph_weight_path, preserve_ratio, new_metric=True):
     # tps_fps_weight = self.build_tps_fps_weight(target)
     weight = initialize_weight(graph_weight_path)
-    tps_fps_weight = build_tps_fps_weight(target, weight, graph_weight_path)
+    tps_fps_weight = build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio)
 
     ap = []
     fps_ap=[]

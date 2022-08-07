@@ -25,7 +25,7 @@ def calculate_stats(output, target, args):
 
     classes_num = target.shape[-1]
     stats = []
-    ap,fps_ap, tps_ap, tps_fps_ap = mean_average_precision(target, output, args.graph_weight_path)
+    ap,fps_ap, tps_ap, tps_fps_ap = mean_average_precision(target, output, args.graph_weight_path, args.preserve_ratio)
 
     logging.info("ap %s, fps_ap %s, tps_ap %s, tps_fps_ap %s" % (np.mean(ap), np.mean(fps_ap), np.mean(tps_ap), np.mean(tps_fps_ap)))
     print("ap %s, fps_ap %s, tps_ap %s, tps_fps_ap %s" % (np.mean(ap), np.mean(fps_ap), np.mean(tps_ap), np.mean(tps_fps_ap)))

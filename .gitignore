@@ -19,6 +19,7 @@ exp
 *.pyc
 fairseq
 *.pyc
+*.json
 *.png
 audioset*
 log*
