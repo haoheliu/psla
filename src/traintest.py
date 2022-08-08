@@ -37,6 +37,8 @@ def train(audio_model, train_loader, test_loader, args):
     per_sample_data_time = AverageMeter()
     loss_meter = AverageMeter()
     score_loss_meter = AverageMeter()
+    energy_meter = AverageMeter()
+    zero_loss_meter = AverageMeter()
     per_sample_dnn_time = AverageMeter()
     progress = []
     # best_ensemble_mAP is checkpoint ensemble from the first epoch to the best epoch
@@ -119,7 +121,7 @@ def train(audio_model, train_loader, test_loader, args):
                     param_group['lr'] = warm_lr
                 logging.info('warm-up learning rate is {:f}'.format(optimizer.param_groups[0]['lr']))
 
-            audio_output, score_loss = audio_model(audio_input)
+            audio_output, score_pred, energy_score = audio_model(audio_input)
 
             if isinstance(loss_fn, torch.nn.CrossEntropyLoss):
                 loss = loss_fn(audio_output, torch.argmax(labels.long(), axis=1))
@@ -135,8 +137,40 @@ def train(audio_model, train_loader, test_loader, args):
                     loss = torch.mean(loss)
             
             # Can this work?
-            if(args.score_loss and score_loss < args.score_loss_threshold):
-                loss = loss - score_loss
+            # Ignore empty frames
+            score_mask = torch.mean((audio_input * args.dataset_std + args.dataset_mean).exp(), dim=-1, keepdim=True)
+            score_mask = score_mask < (torch.min(score_mask) + 1e-6)
+            zero_loss_final = None
+            std_loss_final = torch.tensor([0.0]).cuda()
+            energy_final = torch.tensor([0.0]).cuda()
+            # std_loss_final = None
+            # energy_final = None
+            for id in range(score_pred.size(0)):
+                zero_loss = torch.mean(score_pred[id][score_mask[id]])
+                if(torch.isnan(zero_loss).item()):
+                    continue
+                if(zero_loss > 0.1 * args.preserve_ratio):
+                    loss = loss + 0.001 * zero_loss / score_pred.size(0) # [bs, length, 1]
+                if(zero_loss_final is None):
+                    zero_loss_final = zero_loss / score_pred.size(0)
+                else:
+                    zero_loss_final = zero_loss_final + zero_loss / score_pred.size(0)
+
+                ##################################################################
+                energy_loss = torch.std(energy_score[id][~score_mask[id]])
+                if(torch.isnan(energy_loss).item()): continue
+                if(energy_final is None):
+                    energy_final = energy_loss / energy_score.size(0)
+                else:
+                    energy_final = energy_final + energy_loss / energy_score.size(0)
+                
+                ##################################################################                
+                std_loss = torch.std(score_pred[id][~score_mask[id]])
+                if(torch.isnan(std_loss).item()): continue
+                if(std_loss_final is None):
+                    std_loss_final = std_loss / score_pred.size(0)
+                else:
+                    std_loss_final = std_loss_final + std_loss / score_pred.size(0)
             
             # optimization if amp is not used
             optimizer.zero_grad()
@@ -147,7 +181,9 @@ def train(audio_model, train_loader, test_loader, args):
 
             # record loss
             loss_meter.update(loss.item(), B)
-            score_loss_meter.update(score_loss.item(), B)
+            energy_meter.update(energy_final.item(), B)
+            score_loss_meter.update(std_loss_final.item(), B)
+            zero_loss_meter.update(zero_loss_final.item(), B)
             batch_time.update(time.time() - end_time)
             per_sample_time.update((time.time() - end_time)/audio_input.shape[0])
             per_sample_dnn_time.update((time.time() - dnn_start_time)/audio_input.shape[0])
@@ -170,9 +206,11 @@ def train(audio_model, train_loader, test_loader, args):
                 'Per Sample Data Time {per_sample_data_time.avg:.5f}\t'
                 'Per Sample DNN Time {per_sample_dnn_time.avg:.5f}\t'
                 'Train Loss {loss_meter.avg:.4f}\t'
-                'Score Loss {score_loss_meter.avg:.4f}\t'.format(
+                'std Loss {score_loss_meter.avg:.4f}\t'
+                'zero Loss {zero_loss_meter.avg:.4f}\t'
+                'energy Loss {energy_meter.avg:.4f}\t'.format(
                 epoch, i, len(train_loader), per_sample_time=per_sample_time, per_sample_data_time=per_sample_data_time,
-                    per_sample_dnn_time=per_sample_dnn_time, loss_meter=loss_meter, score_loss_meter=score_loss_meter))
+                    per_sample_dnn_time=per_sample_dnn_time, loss_meter=loss_meter, score_loss_meter=score_loss_meter, zero_loss_meter=zero_loss_meter,energy_meter=energy_meter))
                 if np.isnan(loss_meter.avg):
                     logging.error("training diverged...")
                     return
@@ -192,11 +230,11 @@ def train(audio_model, train_loader, test_loader, args):
             val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc}
             wandb.log(val_info, step=global_step)
             # ensemble results
-            if(args.val_interval == 1):
-                ensemble_stats = validate_ensemble(args, epoch)
-                ensemble_mAP = np.mean([stat['AP'] for stat in ensemble_stats])
-                ensemble_mAUC = np.mean([stat['auc'] for stat in ensemble_stats])
-                ensemble_acc = ensemble_stats[0]['acc']
+            # if(args.val_interval == 1):
+            ensemble_stats = validate_ensemble(args, epoch)
+            ensemble_mAP = np.mean([stat['AP'] for stat in ensemble_stats])
+            ensemble_mAUC = np.mean([stat['auc'] for stat in ensemble_stats])
+            ensemble_acc = ensemble_stats[0]['acc']
 
             middle_ps = [stat['precisions'][int(len(stat['precisions'])/2)] for stat in stats]
             middle_rs = [stat['recalls'][int(len(stat['recalls'])/2)] for stat in stats]
@@ -214,12 +252,12 @@ def train(audio_model, train_loader, test_loader, args):
             logging.info("train_loss: {:.6f}".format(loss_meter.avg))
             logging.info("valid_loss: {:.6f}".format(valid_loss))
 
-            if(args.val_interval == 1):
-                if main_metrics == 'mAP':
-                    result[epoch-1, :] = [mAP, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_mAP, ensemble_mAUC, optimizer.param_groups[0]['lr']]
-                else:
-                    result[epoch-1, :] = [acc, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_acc, ensemble_mAUC, optimizer.param_groups[0]['lr']]
-                np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
+            # if(args.val_interval == 1):
+            if main_metrics == 'mAP':
+                result[epoch-1, :] = [mAP, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_mAP, ensemble_mAUC, optimizer.param_groups[0]['lr']]
+            else:
+                result[epoch-1, :] = [acc, mAUC, average_precision, average_recall, d_prime(mAUC), loss_meter.avg, valid_loss, ensemble_acc, ensemble_mAUC, optimizer.param_groups[0]['lr']]
+            np.savetxt(exp_dir + '/result.csv', result, delimiter=',')
             logging.info('validation finished')
 
             if mAP > best_mAP:
@@ -232,10 +270,10 @@ def train(audio_model, train_loader, test_loader, args):
                 if main_metrics == 'acc':
                     best_epoch = epoch
 
-            if(args.val_interval == 1):
-                if ensemble_mAP > best_ensemble_mAP:
-                    best_ensemble_epoch = epoch
-                    best_ensemble_mAP = ensemble_mAP
+            # if(args.val_interval == 1):
+            if ensemble_mAP > best_ensemble_mAP:
+                best_ensemble_epoch = epoch
+                best_ensemble_mAP = ensemble_mAP
 
             if best_epoch == epoch:
                 torch.save(audio_model.state_dict(), "%s/models/best_audio_model.pth" % (exp_dir))
@@ -301,7 +339,7 @@ def validate(audio_model, val_loader, args, epoch, eval_target=False):
             batchsize = audio_input.size(0)
             audio_input = audio_input.to(device)    
             # compute output    
-            audio_output,_ = audio_model(audio_input) 
+            audio_output,_,_ = audio_model(audio_input) 
             predictions = audio_output.to('cpu').detach()   
             A_predictions.append(predictions)   
             A_targets.append(labels)    
@@ -346,14 +384,14 @@ def validate(audio_model, val_loader, args, epoch, eval_target=False):
 def validate_ensemble(args, epoch):
     exp_dir = args.exp_dir
     target = np.loadtxt(exp_dir+'/predictions/target.csv', delimiter=',')
-    if epoch == 1:
-        ensemble_predictions = np.loadtxt(exp_dir + '/predictions/predictions_1.csv', delimiter=',')
+    if epoch == args.val_interval or not os.path.exists(exp_dir+'/predictions/ensemble_predictions.csv'):
+        ensemble_predictions = np.loadtxt(exp_dir + '/predictions/predictions_%s.csv' % epoch, delimiter=',')
     else:
-        ensemble_predictions = np.loadtxt(exp_dir + '/predictions/ensemble_predictions.csv', delimiter=',') * (epoch - 1)
+        ensemble_predictions = np.loadtxt(exp_dir + '/predictions/ensemble_predictions.csv', delimiter=',') * (epoch - args.val_interval)
         predictions = np.loadtxt(exp_dir+'/predictions/predictions_' + str(epoch) + '.csv', delimiter=',')
         ensemble_predictions = ensemble_predictions + predictions
         # remove the prediction file to save storage space
-        os.remove(exp_dir+'/predictions/predictions_' + str(epoch-1) + '.csv')
+        os.remove(exp_dir+'/predictions/predictions_' + str(epoch - args.val_interval) + '.csv')
 
     ensemble_predictions = ensemble_predictions / epoch
     np.savetxt(exp_dir+'/predictions/ensemble_predictions.csv', ensemble_predictions, delimiter=',')
@@ -365,11 +403,15 @@ def validate_wa(audio_model, val_loader, args, start_epoch, end_epoch):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     exp_dir = args.exp_dir
 
-    sdA = torch.load(exp_dir + '/models/audio_model.' + str(start_epoch) + '.pth', map_location=device)
-
+    # sdA = torch.load(exp_dir + '/models/audio_model.' + str(args.val_interval) + '.pth', map_location=device)
+    sdA = None
     model_cnt = 1
     for epoch in range(start_epoch, end_epoch+1):
+        if(not os.path.exists(exp_dir + '/models/audio_model.' + str(epoch) + '.pth')): 
+            continue
         sdB = torch.load(exp_dir + '/models/audio_model.' + str(epoch) + '.pth', map_location=device)
+        if(sdA is None):
+            sdA = sdB; continue
         for key in sdA:
             sdA[key] = sdA[key] + sdB[key]
         model_cnt += 1

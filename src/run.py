@@ -73,12 +73,10 @@ parser.add_argument('--bal', help='if use balance sampling', type=ast.literal_ev
 parser.add_argument("--sampler", type=str, default="NeuralSampler")
 parser.add_argument("--weight_func", type=str, default="")
 parser.add_argument("--preserve_ratio", type=float, default=0.1)
-parser.add_argument("--score_loss_threshold", type=float, default=0.01)
 parser.add_argument("--alpha", type=float, default=1.0, help="The scaling factor to the importance score")
 parser.add_argument("--beta", type=float, default=1.0, help="The scaling factor to the graph weight")
 parser.add_argument("--val_interval", type=int, default=1)
-parser.add_argument("--score_loss", type=bool, default=False)
-parser.add_argument("--reweight_loss", type=bool, default=False)
+parser.add_argument("--reweight_loss", type=ast.literal_eval, default=False)
 
 args = parser.parse_args()
 
@@ -90,7 +88,7 @@ config = vars(args)
 
 wandb.init(
   project="iclr2023",
-  mode="disabled", # TODO
+#   mode="disabled", # TODO
   name=os.path.basename(args.exp_dir),
   notes="Debug",
   tags=[args.sampler],

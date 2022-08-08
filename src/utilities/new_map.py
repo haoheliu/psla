@@ -275,10 +275,11 @@ def build_ontology_tps_sample_weight(target, weight, class_idx):
     # Otherwise, the ret value of i-th element will be the confidence that class_idx can be counted as positive
     return ret
 
-def build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio):
+def build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, refresh=False):
     fps_tps_lookup = {}
     save_path = graph_weight_path+"_%s_fps_tps_lookup.pkl" % str(preserve_ratio)
-    if(not os.path.exists(save_path)):
+
+    if(refresh or not os.path.exists(save_path)):
         for i in tqdm(range(target.shape[1])):
             # For each class
             fps_weight = build_ontology_fps_sample_weight(target, weight, i)
@@ -299,31 +300,39 @@ def mean_average_precision(target, clipwise_output, graph_weight_path, preserve_
     fps_ap=[]
     tps_fps_ap=[]
     tps_ap=[]
-    for i in tqdm(range(target.shape[1])):
-        if(new_metric):
-            fps_weight, tps_weight = tps_fps_weight[i]
-        else:
-            fps_weight, tps_weight = None, None
-        ap.append(
-            _average_precision(
-                target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=None
-            )
-        )
-        tps_fps_ap.append(
-            _average_precision(
-                target[:, i], clipwise_output[:, i], tps_weight=tps_weight, fps_weight=fps_weight
-            )
-        )
-        fps_ap.append(
-            _average_precision(
-                target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=fps_weight
-            )
-        )
-        tps_ap.append(
-            _average_precision(
-                target[:, i], clipwise_output[:, i], tps_weight=tps_weight, fps_weight=None
-            )
-        )
+    while(True):
+        try:
+            for i in tqdm(range(target.shape[1])):
+                if(new_metric):
+                    fps_weight, tps_weight = tps_fps_weight[i]
+                else:
+                    fps_weight, tps_weight = None, None
+                ap.append(
+                    _average_precision(
+                        target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=None
+                    )
+                )
+                tps_fps_ap.append(
+                    _average_precision(
+                        target[:, i], clipwise_output[:, i], tps_weight=tps_weight, fps_weight=fps_weight
+                    )
+                )
+                fps_ap.append(
+                    _average_precision(
+                        target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=fps_weight
+                    )
+                )
+                tps_ap.append(
+                    _average_precision(
+                        target[:, i], clipwise_output[:, i], tps_weight=tps_weight, fps_weight=None
+                    )
+                )
+            break
+        except Exception as e:
+            print(e)
+            tps_fps_weight = build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, refresh=True)
+            continue
+        
     return np.array(ap), np.array(fps_ap), np.array(tps_ap), np.array(tps_fps_ap)
 
 def test(new_metric=True):

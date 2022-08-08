@@ -172,9 +172,9 @@ class AudiosetDataset(Dataset):
             fbank = fbank[0:target_length, :]
 
         if filename2 == None:
-            return fbank, 0
+            return fbank, 0, waveform
         else:
-            return fbank, mix_lambda
+            return fbank, mix_lambda, waveform
 
     def __getitem__(self, index):
         """
@@ -197,7 +197,7 @@ class AudiosetDataset(Dataset):
                     mix_sample_idx = random.randint(0, len(self.data)-1)
                     mix_datum = self.data[mix_sample_idx]
                     # get the mixed fbank
-                    fbank, mix_lambda = self._wav2fbank(datum['wav'], mix_datum['wav'])
+                    fbank, mix_lambda, waveform = self._wav2fbank(datum['wav'], mix_datum['wav'])
                     break
                 except:
                     print("error reading file during mixup", datum['wav'], mix_datum['wav'])
@@ -220,7 +220,7 @@ class AudiosetDataset(Dataset):
                 try:
                     datum = self.data[index]
                     label_indices = np.zeros(self.label_num)
-                    fbank, mix_lambda = self._wav2fbank(datum['wav'])
+                    fbank, mix_lambda, waveform = self._wav2fbank(datum['wav'])
                     break
                 except Exception as e:
                     print("error reading file", datum['wav'])
