@@ -323,7 +323,7 @@ class NeuralSamplerLargeEnergyNNFreezePosv2(nn.Module):
         magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
-        pre_x = self.pre_linear(x)
+        pre_x = self.pre_linear(x) + x
 
         score, (hn, cn) = self.feature_lstm(pre_x)
         score = self.linear_lstm(score) + pre_x
@@ -474,7 +474,7 @@ class NeuralSamplerLargeEnergyNNFreezePosv3(nn.Module):
         magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
-        pre_x = self.pre_linear(x)
+        pre_x = self.pre_linear(x) + x
         pre_x = self.pre_lstm_bn(pre_x.unsqueeze(1)).squeeze(1)
         
         score, (hn, cn) = self.feature_lstm(pre_x)
@@ -628,7 +628,7 @@ class NeuralSamplerLargeEnergyNNFreezePosv4(nn.Module):
         magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
-        pre_x = self.pre_linear(x)
+        pre_x = self.pre_linear(x) + x
         pre_x = self.pre_lstm_bn(pre_x.unsqueeze(1).transpose(1,3)).transpose(1,3).squeeze(1)
         
         score, (hn, cn) = self.feature_lstm(pre_x)
