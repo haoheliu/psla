@@ -20,6 +20,7 @@ from torch.utils.data import WeightedRandomSampler
 import numpy as np
 import logging
 import wandb
+from pytorch_lightning.utilities.seed import seed_everything
 
 # I/O args
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -72,15 +73,27 @@ parser.add_argument('--bal', help='if use balance sampling', type=ast.literal_ev
 
 parser.add_argument("--sampler", type=str, default="NeuralSampler")
 parser.add_argument("--weight_func", type=str, default="")
+parser.add_argument("--note", type=str, default="debug")
 parser.add_argument("--preserve_ratio", type=float, default=0.1)
 parser.add_argument("--alpha", type=float, default=1.0, help="The scaling factor to the importance score")
 parser.add_argument("--beta", type=float, default=1.0, help="The scaling factor to the graph weight")
 parser.add_argument("--val_interval", type=int, default=1)
+parser.add_argument("--seed", type=int, default=1234)
 parser.add_argument("--reweight_loss", type=ast.literal_eval, default=False)
 
 args = parser.parse_args()
 
 config = vars(args)
+
+seed_everything(int(args.seed))
+
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+g = torch.Generator()
+g.manual_seed(0)
 
 # cmd = "rm %s" % (os.path.join(os.path.dirname(os.path.dirname(args.exp_dir)),"*fps_tps_lookup.pkl"))
 # print(cmd)
@@ -90,7 +103,7 @@ wandb.init(
   project="iclr2023",
 #   mode="disabled", # TODO
   name=os.path.basename(args.exp_dir),
-  notes="Debug",
+  notes=args.note,
   tags=[args.sampler],
   config=config,
 )
@@ -125,24 +138,24 @@ if args.bal == True:
     dataset = dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf)
     train_loader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=args.batch_size, sampler=sampler, num_workers=args.num_workers, pin_memory=False, drop_last=True)
+        batch_size=args.batch_size, sampler=sampler, num_workers=args.num_workers, pin_memory=False, drop_last=True, worker_init_fn=seed_worker,generator=g)
     logging.info("The length of the dataset is %s, the length of the dataloader is %s, the batchsize is %s" % (len(dataset), len(train_loader), args.batch_size))
 else:
     logging.info('balanced sampler is not used')
     dataset = dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf)
     train_loader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=False, drop_last=True)
+        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=False, drop_last=True, worker_init_fn=seed_worker,generator=g)
     logging.info("The length of the dataset is %s, the length of the dataloader is %s, the batchsize is %s" % (len(dataset), len(train_loader), args.batch_size))
 
 val_loader = torch.utils.data.DataLoader(
     dataloaders.AudiosetDataset(args.data_val, label_csv=args.label_csv, audio_conf=val_audio_conf),
-    batch_size=args.batch_size*2, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=True)
+    batch_size=args.batch_size*2, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
 
 if args.data_eval != None:
     eval_loader = torch.utils.data.DataLoader(
         dataloaders.AudiosetDataset(args.data_eval, label_csv=args.label_csv, audio_conf=val_audio_conf),
-        batch_size=args.batch_size*2, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=True)
+        batch_size=args.batch_size*2, shuffle=False, num_workers=args.num_workers, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
 
 if args.model == 'efficientnet':
     audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha)

@@ -1,2 +1,4 @@
 egs/audioset/exp
 egs/fsd50k/exp
+egs/audioset/wandb
+egs/fsd50k/wandb
