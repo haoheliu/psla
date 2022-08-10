@@ -67,10 +67,11 @@ def train(audio_model, train_loader, test_loader, args):
 
     audio_model = audio_model.to(device)
     # Set up the optimizer
-    trainables = [p for p in audio_model.parameters() if p.requires_grad]
+    trainables = [p for p in audio_model.effnet.parameters() if p.requires_grad] + [p for p in audio_model.attention.parameters() if p.requires_grad]
+    trainable_frontend = [p for p in audio_model.neural_sampler.parameters() if p.requires_grad]
     logging.info('Total parameter number is : {:.3f} million'.format(sum(p.numel() for p in audio_model.parameters()) / 1e6))
     logging.info('Total trainable parameter number is : {:.3f} million'.format(sum(p.numel() for p in trainables) / 1e6))
-    optimizer = torch.optim.Adam(trainables, args.lr, weight_decay=5e-7, betas=(0.95, 0.999))
+    optimizer = torch.optim.Adam([{'params': trainables, "lr":args.lr},{'params': trainable_frontend, "lr": args.lr / 20}], args.lr, weight_decay=5e-7, betas=(0.95, 0.999))
     
     if(os.path.exists(os.path.join(args.exp_dir, "models/best_optim_state.pth"))):
         logging.info("Reloading optimizer" + os.path.join(args.exp_dir, "models/best_optim_state.pth"))
@@ -119,7 +120,7 @@ def train(audio_model, train_loader, test_loader, args):
                 warm_lr = (global_step / 1000) * args.lr
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = warm_lr
-                logging.info('warm-up learning rate is {:f}'.format(optimizer.param_groups[0]['lr']))
+                logging.info('warm-up learning rate is {:f} {:f}'.format(optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr']))
 
             audio_output, score_pred, energy_score = audio_model(audio_input)
 
@@ -167,6 +168,8 @@ def train(audio_model, train_loader, test_loader, args):
                 ##################################################################                
                 std_loss = torch.std(score_pred[id][~score_mask[id]])
                 if(torch.isnan(std_loss).item()): continue
+                # if(std_loss < energy_loss * 0.5):
+                    # loss = loss - std_loss / score_loss.size(0) # [bs, length, 1]
                 if(std_loss_final is None):
                     std_loss_final = std_loss / score_pred.size(0)
                 else:
@@ -289,7 +292,7 @@ def train(audio_model, train_loader, test_loader, args):
 
         scheduler.step()
 
-        logging.info('Epoch-{0} lr: {1}'.format(epoch, optimizer.param_groups[0]['lr']))
+        logging.info('Epoch-{0} lr: {1}, {2}'.format(epoch, optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr']))
 
         finish_time = time.time()
         logging.info('epoch {:d} training time: {:.3f}'.format(epoch, finish_time-begin_time))

@@ -164,9 +164,9 @@ elif args.model == 'resnet':
 elif args.model == 'mbnet':
     audio_model = models.MBNet(label_dim=args.n_class, pretrain=args.effpretrain)
 
-# wandb.watch(
-#     audio_model, criterion=None, log="all", log_freq=100, idx=None, log_graph=True
-# )
+wandb.watch(
+    audio_model, criterion=None, log="all", log_freq=100, idx=None, log_graph=True
+)
 
 # if you want to use a pretrained model for fine-tuning, uncomment here.
 if("audioset" not in args.dataset):
@@ -281,7 +281,7 @@ else:
     logging.info('---------------evaluate best single model on the evaluation set---------------')
     # result is the performance of each epoch, we average the results of the last 5 epochs
     result = np.loadtxt(args.exp_dir + '/result.csv', delimiter=',')
-    last_five_epoch_mean = np.mean(result[-5: , :], axis=0)
+    last_five_epoch_mean = np.max(result[-20: , :], axis=0)
     eval_mAP = last_five_epoch_mean[0]
     eval_mAUC = last_five_epoch_mean[1]
     logging.info("mAP: {:.6f}".format(eval_mAP))
