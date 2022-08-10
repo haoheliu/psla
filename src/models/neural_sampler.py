@@ -1573,7 +1573,6 @@ class NeuralSamplerEnergyNNFreezePos(nn.Module):
         tensor_list = torch.matmul(weight.permute(0,2,1), feature)
         pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
 
-
         ret['emb'] = pos_emb
         ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
         ret['score_loss'] = torch.mean(torch.std(score, dim=1))

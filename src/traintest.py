@@ -6,6 +6,7 @@
 # @File    : traintest.py
 
 import sys
+from tabnanny import verbose
 sys.path.append("/media/Disk_HDD/haoheliu/projects/psla/src")
 import os
 import datetime
@@ -67,11 +68,14 @@ def train(audio_model, train_loader, test_loader, args):
 
     audio_model = audio_model.to(device)
     # Set up the optimizer
-    trainables = [p for p in audio_model.effnet.parameters() if p.requires_grad] + [p for p in audio_model.attention.parameters() if p.requires_grad]
-    trainable_frontend = [p for p in audio_model.neural_sampler.parameters() if p.requires_grad]
+    trainables = [p for p in audio_model.parameters() if p.requires_grad]
+
+    # trainables = [p for p in audio_model.module.effnet.parameters() if p.requires_grad] + [p for p in audio_model.module.attention.parameters() if p.requires_grad]
+    # trainable_frontend = [p for p in audio_model.module.neural_sampler.parameters() if p.requires_grad]
+
     logging.info('Total parameter number is : {:.3f} million'.format(sum(p.numel() for p in audio_model.parameters()) / 1e6))
     logging.info('Total trainable parameter number is : {:.3f} million'.format(sum(p.numel() for p in trainables) / 1e6))
-    optimizer = torch.optim.Adam([{'params': trainables, "lr":args.lr},{'params': trainable_frontend, "lr": args.lr / 20}], args.lr, weight_decay=5e-7, betas=(0.95, 0.999))
+    optimizer = torch.optim.Adam(trainables, args.lr, weight_decay=5e-7, betas=(0.95, 0.999))
     
     if(os.path.exists(os.path.join(args.exp_dir, "models/best_optim_state.pth"))):
         logging.info("Reloading optimizer" + os.path.join(args.exp_dir, "models/best_optim_state.pth"))
@@ -81,6 +85,12 @@ def train(audio_model, train_loader, test_loader, args):
     # dataset specific settings
     #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=args.lr_patience, verbose=True)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(args.lrscheduler_start, 1000, 5)), gamma=args.lrscheduler_decay, last_epoch=epoch - 1)
+    # lambda1 = lambda epoch: 0.95 ** (epoch-args.lrscheduler_start) if(epoch > args.lrscheduler_start) else 1.0
+    # lambda2 = lambda epoch: 0.8 ** (epoch-args.lrscheduler_start) if(epoch > args.lrscheduler_start) else 1.0
+    # lambda1 = lambda epoch: 0.95 ** epoch if(epoch > args.lrscheduler_start) else epoch
+    # lambda2 = lambda epoch: 0.85 ** epoch if(epoch > args.lrscheduler_start) else epoch
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=[lambda1, lambda2], last_epoch=epoch - 1, verbose=True)
+
     main_metrics = args.metrics
     if args.loss == 'BCE':
         loss_fn = nn.BCELoss(reduction="none")
@@ -98,6 +108,13 @@ def train(audio_model, train_loader, test_loader, args):
     result = np.zeros([args.n_epochs, 10])
     audio_model.train()
     while epoch < args.n_epochs + 1:
+        # if(epoch > 35):
+        #     for p in audio_model.module.neural_sampler.parameters():
+        #         p.requires_grad = False
+        # else:
+        #     for p in audio_model.module.neural_sampler.parameters():
+        #         p.requires_grad = True
+
         print("Epoch:", epoch)
         begin_time = time.time()
         end_time = time.time()
@@ -117,10 +134,13 @@ def train(audio_model, train_loader, test_loader, args):
 
             # first several steps for warm-up
             if global_step <= 1000 and global_step % 50 == 0 and warmup == True:
+                # optimizer.param_groups[0]['lr'] = (global_step / 1000) * args.lr
+                # optimizer.param_groups[1]['lr'] = (global_step / 1000) * args.lr
                 warm_lr = (global_step / 1000) * args.lr
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = warm_lr
-                logging.info('warm-up learning rate is {:f} {:f}'.format(optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr']))
+                # logging.info('warm-up learning rate is {:f} {:f}'.format(optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr']))
+                logging.info('warm-up learning rate is {:f}'.format(optimizer.param_groups[0]['lr']))
 
             audio_output, score_pred, energy_score = audio_model(audio_input)
 
@@ -292,7 +312,8 @@ def train(audio_model, train_loader, test_loader, args):
 
         scheduler.step()
 
-        logging.info('Epoch-{0} lr: {1}, {2}'.format(epoch, optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr']))
+        # logging.info('Epoch-{0} lr: {1}, {2}'.format(epoch, optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr']))
+        logging.info('Epoch-{0} lr: {1}'.format(epoch, optimizer.param_groups[0]['lr']))
 
         finish_time = time.time()
         logging.info('epoch {:d} training time: {:.3f}'.format(epoch, finish_time-begin_time))

@@ -7,7 +7,7 @@
 # --------------------------------------------
 # Executable and its arguments
 executable    = /bin/sh
-arguments = $SH_FILE $(type)
+arguments = /mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_09_08_2022_15_25/condor_submit/1_condor_submit_base.sh  $(type)
 log    = condor_log/c$(cluster).p$(process).log
 output = condor_log/c$(cluster).p$(process).out
 error  = condor_log/c$(cluster).p$(process).error
@@ -24,8 +24,9 @@ Environment = PYTHONIOENCODING=UTF-8
 +GPUMem = 8000
 # -------------------------------------
 # Requirements for the Job
-requirements = (machine!="aisurrey07.surrey.ac.uk") && (machine!="aisurrey15.surrey.ac.uk") && (machine!="aisurrey18.surrey.ac.uk") && (machine!="aisurrey19.surrey.ac.uk") && (machine!="aisurrey04.surrey.ac.uk") && (machine!="aisurrey09.surrey.ac.uk") && (CUDADeviceName == "GeForce RTX 2080 Ti") || (CUDADeviceName == "GeForce RTX 3090") || (CUDADeviceName == "Quadro RTX 8000") 
 
+requirements =  (CUDADeviceName == "GeForce RTX 2080 Ti") || (CUDADeviceName == "GeForce RTX 3090") || (CUDADeviceName == "Quadro RTX 8000") 
+# (machine == "aisurrey18.surrey.ac.uk") &&
 # --------------------------------------
 # Resources
 request_GPUs     = 1
@@ -34,6 +35,6 @@ request_memory = 32G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
-queue 1 type in NeuralSamplerLargeEnergyNNFreezePos,NeuralSamplerLargeEnergyNNFreezePosv2,NeuralSamplerLargeEnergyNNFreezePos,NeuralSamplerLargeEnergyNNFreezePosv2,NeuralSamplerLargeEnergyNNFreezePos,NeuralSamplerLargeEnergyNNFreezePosv2
+queue 1 type in NeuralSamplerLargeEnergyNNFreezePos
 # NeuralSamplerSpecPool,NeuralSamplerAvgMaxPool,NeuralSamplerDNNFreezePos,NeuralSamplerEnergyNNFreezePos,NeuralSamplerLargeEnergyNNFreezePos,NeuralSamplerXLargeEnergyNNFreezePos
 # -----------------------------------

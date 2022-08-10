@@ -22,6 +22,17 @@ import logging
 import wandb
 from pytorch_lightning.utilities.seed import seed_everything
 
+def seed_torch(seed=1029):
+    print("Set seed to %s" % seed)
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed) 
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
 # I/O args
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--data-train", type=str, default='', help="training data json")
@@ -86,6 +97,7 @@ args = parser.parse_args()
 config = vars(args)
 
 seed_everything(int(args.seed))
+seed_torch(int(args.seed))
 
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
