@@ -176,9 +176,9 @@ elif args.model == 'resnet':
 elif args.model == 'mbnet':
     audio_model = models.MBNet(label_dim=args.n_class, pretrain=args.effpretrain)
 
-wandb.watch(
-    audio_model, criterion=None, log="all", log_freq=100, idx=None, log_graph=True
-)
+# wandb.watch(
+#     audio_model, criterion=None, log="all", log_freq=100, idx=None, log_graph=True
+# )
 
 # if you want to use a pretrained model for fine-tuning, uncomment here.
 if("audioset" not in args.dataset):

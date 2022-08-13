@@ -11,6 +11,7 @@ arguments = $SH_FILE $(type)
 log    = condor_log/c$(cluster).p$(process).log
 output = condor_log/c$(cluster).p$(process).out
 error  = condor_log/c$(cluster).p$(process).error
+batch_name=$BATCH_NAME
 
 # -----------------------------------
 # File Transfer, Input, Output
@@ -34,5 +35,5 @@ request_memory = 32G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
-queue 1 type in NeuralSamplerUniformPool,NeuralSamplerAvgMaxPool,NeuralSamplerLargeEnergyNNFreezePos
+queue 1 type in NeuralSamplerDNNFreezePos
 # -----------------------------------
