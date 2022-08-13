@@ -59,8 +59,8 @@ def train(audio_model, train_loader, test_loader, args):
     if(os.path.exists(os.path.join(args.exp_dir, "models/best_audio_model.pth"))):
         logging.info("Reloading model params" + os.path.join(args.exp_dir, "models/best_audio_model.pth"))
         model_checkpoint = torch.load(os.path.join(args.exp_dir, "models/best_audio_model.pth"), map_location="cpu")
-        audio_model.load_state_dict(model_checkpoint)
-
+        audio_model.load_state_dict(model_checkpoint["state_dict"])
+        epoch = model_checkpoint["epoch"]
     # print("Reloading pretrained audioset model!")
     # model_checkpoint = torch.load("/media/Disk_HDD/haoheliu/projects/psla/pretrained_models/as_mdl_0_wa.pth", map_location="cpu")
     # # model_checkpoint = torch.load("/media/Disk_HDD/haoheliu/projects/psla/pretrained_models/as_mdl_0.pth", map_location="cpu")
@@ -80,7 +80,8 @@ def train(audio_model, train_loader, test_loader, args):
     if(os.path.exists(os.path.join(args.exp_dir, "models/best_optim_state.pth"))):
         logging.info("Reloading optimizer" + os.path.join(args.exp_dir, "models/best_optim_state.pth"))
         opt_checkpoint = torch.load(os.path.join(args.exp_dir, "models/best_optim_state.pth"), map_location="cpu")
-        optimizer.load_state_dict(opt_checkpoint)
+        optimizer.load_state_dict(opt_checkpoint["state_dict"])
+        epoch = model_checkpoint["epoch"]
 
     # dataset specific settings
     #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=args.lr_patience, verbose=True)
@@ -299,8 +300,8 @@ def train(audio_model, train_loader, test_loader, args):
                 best_ensemble_mAP = ensemble_mAP
 
             if best_epoch == epoch:
-                torch.save(audio_model.state_dict(), "%s/models/best_audio_model.pth" % (exp_dir))
-                torch.save(optimizer.state_dict(), "%s/models/best_optim_state.pth" % (exp_dir))
+                torch.save({"state_dict": audio_model.state_dict(), "epoch": best_epoch}, "%s/models/best_audio_model.pth" % (exp_dir))
+                torch.save({"state_dict": optimizer.state_dict(), "epoch": best_epoch}, "%s/models/best_optim_state.pth" % (exp_dir))
 
             torch.save(audio_model.state_dict(), "%s/models/audio_model.%d.pth" % (exp_dir, epoch))
             if len(train_loader.dataset) > 2e5:
