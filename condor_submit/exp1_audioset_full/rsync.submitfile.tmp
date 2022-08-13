@@ -7,7 +7,7 @@
 # --------------------------------------------
 # Executable and its arguments
 executable    = /usr/bin/rsync
-arguments     = -a -v --exclude-from=/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/.rsyncignore  /mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/ /mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_13_08_2022_13_57/
+arguments     = -a -v --ignore-existing /mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_13_08_2022_15_12/egs/ /mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/egs/
 
 # --------------------------------------------
 # Input, Output and Log files

@@ -1,4 +1,5 @@
 *.pth
+*.tmp
 *.csv
 *.pdf
 /src/ensemble/copy_ensemble.sh
