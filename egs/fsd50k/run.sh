@@ -13,7 +13,7 @@
 # set -x
 conda activate psla
 export TORCH_HOME=./
-date=$(date '+%Y-%m-%d-%H-%M')
+date=$(date '+%Y-%m-%d_%H_%M_%S')
 att_head=4
 model=efficientnet
 psla=True

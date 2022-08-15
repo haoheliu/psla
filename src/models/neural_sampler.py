@@ -237,7 +237,7 @@ class NeuralSamplerAvgMaxPool(nn.Module):
         ret['energy'],_=self.score_norm(energy, self.output_seq_length)
         ret['score'],_=self.score_norm(energy, self.output_seq_length)
         feature = self.pooling(x.unsqueeze(1))
-        ret['score_loss']=torch.tensor([0.0]).cuda()
+        ret['score_loss']=torch.tensor([0.0]).to(x.device)
         ret['feature']=feature
         ret['x']=x
         return ret

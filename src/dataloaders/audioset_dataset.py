@@ -9,7 +9,7 @@ import torch.nn.functional
 from torch.utils.data import Dataset
 import random
 import logging
-from torchsubband import SubbandDSP
+# from torchsubband import SubbandDSP
 import os
 
 def make_index_dict(label_csv):
@@ -84,7 +84,7 @@ class AudiosetDataset(Dataset):
         self.noise = self.audio_conf.get('noise')
         if self.noise == True:
             logging.info('now use noise augmentation')
-        self.dsp = SubbandDSP()
+        # self.dsp = SubbandDSP()
         self.index_dict = make_index_dict(label_csv)
         self.label_num = len(self.index_dict)
         logging.info('number of classes is {:d}'.format(self.label_num))

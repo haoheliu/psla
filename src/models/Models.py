@@ -113,12 +113,14 @@ class EffNetAttention(nn.Module):
         self.avgpool = nn.AvgPool2d((4, 1))
         self.effnet._fc = nn.Identity()
         self.batch_idx=0
+        self.rank = None
 
     def forward(self, x, nframes=1056):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
         ret = self.neural_sampler(x)
         x, score, energy = ret['feature'], ret['score'], ret['energy']
-        if(self.batch_idx % 1500 == 0 and self.training):
+        
+        if(self.rank == 0 and self.batch_idx % 2000 == 0 and self.training):
             self.neural_sampler.visualize(ret)
 
         x = x.transpose(2, 3)
@@ -128,9 +130,7 @@ class EffNetAttention(nn.Module):
         x = x.transpose(2,3)
         out, norm_att = self.attention(x)
         if(self.training): self.batch_idx += 1
-
         return out, score, energy
-
 
 def test_model():
     input_tdim = 3000
