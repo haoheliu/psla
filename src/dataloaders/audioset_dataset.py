@@ -270,7 +270,7 @@ class AudiosetDataset(Dataset):
         if(self.mode == "evaluation"):
             return fbank, label_indices, os.path.basename(datum['wav'])
         else:
-            return fbank, label_indices
+            return fbank, label_indices, os.path.basename(datum['wav'])
 
     def random_uniform(self, start, end):
         val = torch.rand(1).item()

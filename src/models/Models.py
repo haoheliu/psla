@@ -124,7 +124,6 @@ class EffNetAttention(nn.Module):
             self.neural_sampler.visualize(ret)
 
         x = x.transpose(2, 3)
-        
         x = self.effnet.extract_features(x) # torch.Size([10, 1280, 4, 4])
         x = self.avgpool(x) # torch.Size([10, 1280, 1, 4])
         x = x.transpose(2,3)

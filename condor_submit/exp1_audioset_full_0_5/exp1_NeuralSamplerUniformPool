@@ -29,11 +29,11 @@ requirements = (CUDADeviceName == "GeForce RTX 2080 Ti") || (CUDADeviceName == "
 
 # --------------------------------------
 # Resources
-request_GPUs     = 1
+request_GPUs     = 4
 request_CPUs     = 1
-request_memory = 32G
+request_memory = 96G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
-queue 1 type in NeuralSamplerAvgMaxPool
+queue 1 type in NeuralSamplerUniformPool
 # -----------------------------------

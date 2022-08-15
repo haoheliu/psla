@@ -60,10 +60,7 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
     if(os.path.exists(os.path.join(args.exp_dir, "models/best_audio_model.pth"))):
         logging_info(rank, "Reloading model params" + os.path.join(args.exp_dir, "models/best_audio_model.pth"))
         model_checkpoint = torch.load(os.path.join(args.exp_dir, "models/best_audio_model.pth"), map_location="cpu")
-        if(n_gpus > 1):
-            audio_model.module.load_state_dict(model_checkpoint["state_dict"])
-        else:
-            audio_model.load_state_dict(model_checkpoint["state_dict"])
+        audio_model.load_state_dict(model_checkpoint["state_dict"])
         epoch = model_checkpoint["epoch"]
         global_step = model_checkpoint["global_step"]
         args.warmup=False
@@ -118,7 +115,6 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
     result = np.zeros([args.n_epochs, 10])
     audio_model.train()
     while epoch < args.n_epochs + 1:
-
         print("Epoch:", epoch)
         begin_time = time.time()
         end_time = time.time()
@@ -127,8 +123,8 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
         logging_info(rank, datetime.datetime.now())
         logging_info(rank, "current #epochs=%s, #steps=%s" % (epoch, global_step))
         # print(os.getpid(), "ready to engage")
-        for i, (audio_input, labels) in enumerate(train_loader):
-            # print("fire!")
+        for i, (audio_input, labels, fnames) in enumerate(train_loader):
+            # print(rank, fnames)
             B = audio_input.size(0)
             audio_input = audio_input.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
@@ -225,6 +221,7 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                     info = {
                     "train-loss":float(loss_meter.avg),
                     "score-loss":float(score_loss_meter.avg),
+                    "zero-loss":float(zero_loss_meter.avg),
                     "speed-data":float(per_sample_data_time.avg),
                     "speed-total":float(per_sample_time.avg),
                     "speed-dnn":float(per_sample_dnn_time.avg)}
@@ -356,8 +353,8 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
 def validate(rank, n_gpus, audio_model, val_loader, args, epoch, eval_target=False):  
     device = torch.device("cuda:%s" % rank if torch.cuda.is_available() else "cpu")
     batch_time = AverageMeter()
-    if not isinstance(audio_model, nn.DataParallel):    
-        audio_model = nn.DataParallel(audio_model)  
+    # if not isinstance(audio_model, nn.DataParallel):    
+    #     audio_model = nn.DataParallel(audio_model)  
     audio_model = audio_model.to(device)    
     # switch to evaluate mode   
     audio_model.eval()  
@@ -369,7 +366,7 @@ def validate(rank, n_gpus, audio_model, val_loader, args, epoch, eval_target=Fal
     with torch.no_grad():   
         for i, (audio_input, labels ,fname) in tqdm(enumerate(val_loader)):  
             batchsize = audio_input.size(0)
-            audio_input = audio_input.to(device)    
+            audio_input = audio_input.to(device)  
             # compute output    
             audio_output,_,_ = audio_model(audio_input) 
             predictions = audio_output.to('cpu').detach()   
@@ -461,5 +458,5 @@ def validate_wa(rank, n_gpus, audio_model, val_loader, args, start_epoch, end_ep
 
     torch.save(audio_model.state_dict(), exp_dir + '/models/audio_model_wa.pth')
 
-    stats, loss = validate(audio_model, val_loader, args, 'wa')
+    stats, loss = validate(rank, n_gpus, audio_model, val_loader, args, 'wa')
     return stats

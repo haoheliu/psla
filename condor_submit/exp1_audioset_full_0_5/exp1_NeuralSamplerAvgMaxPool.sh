@@ -11,4 +11,4 @@ PROJECT="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla&/mnt/fast/nobacku
 ######################## RUNNING ENTRY ########################
 cd /mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_$IDENTIFIER/egs/audioset
 
-sh exp1_run_full_audioset.sh $1
+sh exp1_run_full_audioset_0_5.sh $1
