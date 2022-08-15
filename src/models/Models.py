@@ -118,7 +118,7 @@ class EffNetAttention(nn.Module):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
         ret = self.neural_sampler(x)
         x, score, energy = ret['feature'], ret['score'], ret['energy']
-        if(self.batch_idx % 300 == 0 and self.training):
+        if(self.batch_idx % 1500 == 0 and self.training):
             self.neural_sampler.visualize(ret)
 
         x = x.transpose(2, 3)

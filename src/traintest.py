@@ -157,7 +157,7 @@ def train(audio_model, train_loader, test_loader, args):
                 if(args.reweight_loss):
                     loss_weight = eval(args.weight_func)(labels, args.graph_weight_path, beta=args.beta)
                     loss_weight = calculate_class_weight(labels, args.graph_weight_path, beta=args.beta)
-                    loss = torch.mean(loss * loss_weight)
+                    loss = (torch.mean(loss * loss_weight) + torch.mean(loss)) / 2
                 else:
                     loss = torch.mean(loss)
             
@@ -419,7 +419,8 @@ def validate_ensemble(args, epoch):
         predictions = np.loadtxt(exp_dir+'/predictions/predictions_' + str(epoch) + '.csv', delimiter=',')
         ensemble_predictions = ensemble_predictions + predictions
         # remove the prediction file to save storage space
-        os.remove(exp_dir+'/predictions/predictions_' + str(epoch - args.val_interval) + '.csv')
+        if(os.path.exists(exp_dir+'/predictions/predictions_' + str(epoch - args.val_interval) + '.csv')):
+            os.remove(exp_dir+'/predictions/predictions_' + str(epoch - args.val_interval) + '.csv')
 
     ensemble_predictions = ensemble_predictions / epoch
     np.savetxt(exp_dir+'/predictions/ensemble_predictions.csv', ensemble_predictions, delimiter=',')

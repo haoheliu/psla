@@ -145,7 +145,7 @@ class Pooling_layer(nn.Module):
             size = x.shape[2] // factor
             out1 =  F.max_pool2d(x, kernel_size=(size, 1))
             out2 = F.avg_pool2d(x, kernel_size=(size, 1))
-            out = out1 + out2
+            out = (out1 + out2) / 2
         elif self.pooling_type == 'uniform':
             out =  self.uniform_sample(x, factor)
         elif self.pooling_type == 'spec':
