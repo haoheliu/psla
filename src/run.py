@@ -22,6 +22,8 @@ import logging
 import wandb
 from pytorch_lightning.utilities.seed import seed_everything
 
+print(os.getcwd())
+
 def seed_torch(seed=1029):
     print("Set seed to %s" % seed)
     random.seed(seed)
@@ -175,6 +177,8 @@ elif args.model == 'resnet':
     audio_model = models.ResNetAttention(label_dim=args.n_class, pretrain=args.impretrain)
 elif args.model == 'mbnet':
     audio_model = models.MBNet(label_dim=args.n_class, pretrain=args.effpretrain)
+
+print("===> Woking directory:", os.getcwd())
 
 # wandb.watch(
 #     audio_model, criterion=None, log="all", log_freq=100, idx=None, log_graph=True

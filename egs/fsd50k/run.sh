@@ -64,7 +64,7 @@ exp_dir=./exp/${date}-${dataset}-${sampler}-${preserve_ratio}-${model}-${eff_b}-
 # exp_dir=./exp/avg-pool-0.1-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
 mkdir -p $exp_dir
 
-CUDA_VISIBLE_DEVICES=0 python ../../src/run.py --data-train $trpath --data-val ./datafiles/fsd50k_val_full.json --data-eval ./datafiles/fsd50k_eval_full.json \
+python ../../src/run.py --data-train $trpath --data-val ./datafiles/fsd50k_val_full.json --data-eval ./datafiles/fsd50k_eval_full.json \
 --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 16 --label-csv ./class_labels_indices.csv \
 --n_class 200 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
 --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} \
