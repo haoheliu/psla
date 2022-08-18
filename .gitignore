@@ -22,6 +22,7 @@ fairseq
 *.pyc
 *.json
 *.png
+*.log
 audioset*
 log*
 *.pkl

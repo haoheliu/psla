@@ -48,7 +48,7 @@ def seed_torch(seed=1029):
     torch.backends.cudnn.deterministic = True
 
 def adaptive_batchsize(args):
-    args.batch_size = int(22 * (args.target_length/1056))
+    args.batch_size = int(22 * (1056/args.target_length))
     if(args.preserve_ratio <= 0.1):
         args.batch_size *= 6
     elif(args.preserve_ratio > 0.1 and args.preserve_ratio <= 0.25):
