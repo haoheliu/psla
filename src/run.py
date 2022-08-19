@@ -122,6 +122,10 @@ def main():
     parser.add_argument("--val_interval", type=int, default=1)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--reweight_loss", type=ast.literal_eval, default=False)
+    
+    parser.add_argument("--apply_zero_loss_threshold", type=float, default=0.5)
+    parser.add_argument("--lambda_zero_loss", type=float, default=0.01)
+    parser.add_argument("--learn_pos_emb", type=ast.literal_eval, default=False)
 
     args = parser.parse_args()
     
@@ -232,7 +236,7 @@ def run(rank, n_gpus, args):
                 batch_size=args.batch_size*2, shuffle=False, num_workers=16, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
 
     if args.model == 'efficientnet':
-        audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha)
+        audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha, learn_pos_emb=args.learn_pos_emb)
     elif args.model == 'resnet':
         audio_model = models.ResNetAttention(label_dim=args.n_class, pretrain=args.impretrain)
     elif args.model == 'mbnet':

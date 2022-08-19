@@ -170,8 +170,8 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                 zero_loss = torch.mean(score_pred[id][score_mask[id]])
                 if(torch.isnan(zero_loss).item()):
                     continue
-                if(zero_loss > 0.5 * args.preserve_ratio):
-                    loss = loss + 0.01 * zero_loss / score_pred.size(0) # [bs, length, 1]
+                if(zero_loss > args.apply_zero_loss_threshold * args.preserve_ratio):
+                    loss = loss + args.lambda_zero_loss * zero_loss / score_pred.size(0) # [bs, length, 1]
                 if(zero_loss_final is None):
                     zero_loss_final = zero_loss / score_pred.size(0)
                 else:

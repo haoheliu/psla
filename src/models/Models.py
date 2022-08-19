@@ -69,13 +69,14 @@ class MBNet(nn.Module):
         return out
 
 class EffNetAttention(nn.Module):
-    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0):
+    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False):
         super(EffNetAttention, self).__init__()
         self.middim = [1280, 1280, 1408, 1536, 1792, 2048, 2304, 2560]
         self.input_seq_length = input_seq_length
         print("Use %s with preserve ratio of %s" % (str(sampler), str(preserve_ratio)))
+        self.learn_pos_emb = learn_pos_emb
         self.alpha = alpha
-        self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha)
+        self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha, self.learn_pos_emb)
         
         if pretrain == False:
             print('EfficientNet Model Trained from Scratch (ImageNet Pretraining NOT Used).')

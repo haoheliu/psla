@@ -35,7 +35,7 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x).permute(1,0,2)
 
 class NeuralSamplerAvgMaxPool(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerAvgMaxPool, self).__init__()
         self.feature_channels=1
         self.preserv_ratio=preserve_ratio
@@ -112,7 +112,7 @@ class NeuralSamplerAvgMaxPool(nn.Module):
             
 # Use ResUNet as feature extractor
 class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25_v2(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25_v2, self).__init__()
         from models.unet.resunet import UNetResComplex_100Mb_6
         self.input_dim=128
@@ -137,7 +137,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25_v2(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         # torch.Size([96, 1056, 128])
@@ -245,7 +245,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25_v2(nn.Module):
 
 # Use the additive pos embedding, initialized with zeros
 class ProposedDilatedUnet_v2(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(ProposedDilatedUnet_v2, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -383,7 +383,7 @@ class ProposedDilatedUnet_v2(nn.Module):
 
 # Use the additive pos embedding, initialized with zeros
 class ProposedDilatedUnet(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(ProposedDilatedUnet, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -515,7 +515,7 @@ class ProposedDilatedUnet(nn.Module):
 
 # Use the additive pos embedding, initialized with zeros
 class NeuralSamplerPosEmbLearnableLargeEnergyNNZeroPos(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNZeroPos, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -652,7 +652,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNZeroPos(nn.Module):
 
 # Freeze the sinisoid positional embeddings
 class NeuralSamplerPosEmbLearnableLargeEnergyNNPosFreeze(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNPosFreeze, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -789,7 +789,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNPosFreeze(nn.Module):
 
 
 class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_25(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_25, self).__init__()
         from models.unet.resunet import UNetResComplex_100Mb_4
         self.input_dim=128
@@ -820,7 +820,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_25(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
         init_gru(self.feature_lstm)
 
@@ -930,7 +930,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_25(nn.Module):
         return weight/(alpha+1e-8)
 
 class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_25(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_25, self).__init__()
         from models.unet.resunet import UNetResComplex_100Mb_5
         self.input_dim=128
@@ -961,7 +961,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_25(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
         init_gru(self.feature_lstm)
 
@@ -1071,7 +1071,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_25(nn.Module):
         return weight/(alpha+1e-8)
 
 class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25, self).__init__()
         from models.unet.resunet import UNetResComplex_100Mb_6
         self.input_dim=128
@@ -1102,7 +1102,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
         init_gru(self.feature_lstm)
 
@@ -1212,7 +1212,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25(nn.Module):
         return weight/(alpha+1e-8)
 
 class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_5(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_5, self).__init__()
         from models.unet.resunet import UNetResComplex_100Mb_4
         self.input_dim=128
@@ -1243,7 +1243,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_5(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
         init_gru(self.feature_lstm)
 
@@ -1353,7 +1353,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet4_0_5(nn.Module):
         return weight/(alpha+1e-8)
 
 class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_5(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_5, self).__init__()
         from models.unet.resunet import UNetResComplex_100Mb_5
         self.input_dim=128
@@ -1384,7 +1384,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_5(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
         init_gru(self.feature_lstm)
 
@@ -1494,7 +1494,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet5_0_5(nn.Module):
         return weight/(alpha+1e-8)
 
 class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_5(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_5, self).__init__()
         from models.unet.resunet import UNetResComplex_100Mb_6
         self.input_dim=128
@@ -1525,7 +1525,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_5(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
         init_gru(self.feature_lstm)
 
@@ -1635,7 +1635,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_5(nn.Module):
         return weight/(alpha+1e-8)
 # Use extra large lstm model
 class NeuralSamplerXLargeEnergyNNZeroPos(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerXLargeEnergyNNZeroPos, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -1772,7 +1772,7 @@ class NeuralSamplerXLargeEnergyNNZeroPos(nn.Module):
 
 # Use extra large lstm model
 class NeuralSamplerLargeEnergyNNZeroPos(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerLargeEnergyNNZeroPos, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -1908,7 +1908,7 @@ class NeuralSamplerLargeEnergyNNZeroPos(nn.Module):
         return weight/(alpha+1e-8)
 # Use extra large lstm model
 class NeuralSamplerEnergyNNZeroPos(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerEnergyNNZeroPos, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -2067,7 +2067,7 @@ class NeuralSamplerPosEmbLearnableNoFakeSoftmax(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         score, (hn, cn) = self.feature_lstm(x)
@@ -2123,7 +2123,7 @@ class NeuralSamplerPosEmbLearnableNoFakeSoftmax(nn.Module):
         return ret
 # Use extra large lstm model
 class NeuralSamplerXLargeEnergyNNFreezePos(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerXLargeEnergyNNFreezePos, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -2152,7 +2152,7 @@ class NeuralSamplerXLargeEnergyNNFreezePos(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
         init_gru(self.feature_lstm)
 
@@ -2307,7 +2307,7 @@ class NeuralSamplerPosEmbLearnableLargeWithMAFeat(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         pre_x = self.pre_linear(x)
@@ -2433,7 +2433,7 @@ class NeuralSamplerPosEmbLearnableLargeWithMAFeatCh(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         pre_x = self.pre_linear(x)
@@ -2513,7 +2513,7 @@ class NeuralSamplerPosEmbLearnableLargeWithMAFeatCh(nn.Module):
         return weight/(alpha+1e-8)
 
 class NeuralSampler_NNMA(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSampler_NNMA, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -2538,7 +2538,7 @@ class NeuralSampler_NNMA(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         ret = {}
@@ -2564,7 +2564,7 @@ class NeuralSampler_NNMA(nn.Module):
             plt.close()
 
 class NeuralSamplerPosEmbLearnableLargeWithMA(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeWithMA, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -2601,7 +2601,7 @@ class NeuralSamplerPosEmbLearnableLargeWithMA(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         pre_x = self.pre_linear(x)
@@ -2678,7 +2678,7 @@ class NeuralSamplerPosEmbLearnableLargeWithMA(nn.Module):
 
 # Use Maxpooling to smoothing the importance score
 class NeuralSamplerPosEmbLearnableLargeEnergyMaxPooling(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyMaxPooling, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -2707,7 +2707,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyMaxPooling(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         # torch.Size([96, 1056, 128])
@@ -2808,7 +2808,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyMaxPooling(nn.Module):
 
 # Use random alpha value to perform data augmentations
 class NeuralSamplerPosEmbLearnableLargeEnergyRandAlpha(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyRandAlpha, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -2837,7 +2837,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyRandAlpha(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         # torch.Size([96, 1056, 128])
@@ -2939,7 +2939,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyRandAlpha(nn.Module):
         return weight/(alpha+1e-8)
 # Use max pooling to smooth the importance score
 class NeuralSamplerPosEmbLearnableLargeEnergyNNMaxPooling(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNMaxPooling, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -2970,7 +2970,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNMaxPooling(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
 
     def forward(self, x):
@@ -3089,7 +3089,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNMaxPooling(nn.Module):
 # 07/23/2022 08:41:02 AM - INFO: train_loss: 0.013516
 # 07/23/2022 08:41:02 AM - INFO: valid_loss: 0.018110
 class NeuralSamplerPosEmbLearnable(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnable, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -3105,7 +3105,7 @@ class NeuralSamplerPosEmbLearnable(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         score, (hn, cn) = self.feature_lstm(x)
@@ -3170,7 +3170,7 @@ class NeuralSamplerPosEmbLearnable(nn.Module):
 
 # Feat do not learn anything
 class NeuralSamplerPosEmbLearnableLargeWithFeatv3(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeWithFeatv3, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -3204,7 +3204,7 @@ class NeuralSamplerPosEmbLearnableLargeWithFeatv3(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         pre_x = self.pre_linear(x)
@@ -3282,7 +3282,7 @@ class NeuralSamplerPosEmbLearnableLargeWithFeatv3(nn.Module):
 # 07/23/2022 06:42:49 AM - INFO: train_loss: 0.013721
 # 07/23/2022 06:42:49 AM - INFO: valid_loss: 0.017955
 class NeuralSamplerNoFakeSoftmax(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerNoFakeSoftmax, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -3298,7 +3298,7 @@ class NeuralSamplerNoFakeSoftmax(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         score, (hn, cn) = self.feature_lstm(x)
@@ -3353,7 +3353,7 @@ class NeuralSamplerNoFakeSoftmax(nn.Module):
         return ret
 
 class NeuralSampler_NNLSTM(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSampler_NNLSTM, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -3370,7 +3370,7 @@ class NeuralSampler_NNLSTM(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
     
     def forward(self, x):
         ret = {}
@@ -3398,7 +3398,7 @@ class NeuralSampler_NNLSTM(nn.Module):
 class NeuralSamplerPosEmbLearnableLargeEnergyNNResUNet6_0_25(nn.Module):
 
 class NeuralSamplerPosEmbLearnableLargeEnergyNNv3(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNv3, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -3533,7 +3533,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNv3(nn.Module):
         alpha = torch.sum(weight, dim=1, keepdim=True)
         return weight/(alpha+1e-8)
 class NeuralSamplerPosEmbLearnableLargeEnergyNNv2(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyNNv2, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -3670,7 +3670,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyNNv2(nn.Module):
 
 # Old alpha, fix 1e-4
 class NeuralSamplerPosEmbLearnableLargeEnergyv4(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyv4, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -3797,7 +3797,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyv4(nn.Module):
 
 # Old alpha, adaptive min
 class NeuralSamplerPosEmbLearnableLargeEnergyv5(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyv5, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -3923,7 +3923,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyv5(nn.Module):
         return weight/(alpha+1e-8)
 # New alpha, fix 1e-4
 class NeuralSamplerPosEmbLearnableLargeEnergyv3(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyv3, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -4059,7 +4059,7 @@ class NeuralSamplerPosEmbLearnableLargeEnergyv3(nn.Module):
 
 # New alpha, adaptive min
 class NeuralSamplerPosEmbLearnableLargeEnergyv2(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NeuralSamplerPosEmbLearnableLargeEnergyv2, self).__init__()
         self.input_dim=128
         self.latent_dim=64
@@ -5736,7 +5736,7 @@ class NeuralSampler(nn.Module):
         return weight/(alpha+1e-8)
 
 class ProposedDilatedConv_2_18_3FreezePos(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(ProposedDilatedConv_2_18_3FreezePos, self).__init__()
         from models.dilated_convolutions.conv import DilatedConv
         self.input_dim=128
@@ -5767,7 +5767,7 @@ class ProposedDilatedConv_2_18_3FreezePos(nn.Module):
             emb_dropout=0.0
             logging.info("Use positional embedding")
             pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
-            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=POS_EMB_REQUIRES_GRAD)
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
         
         init_gru(self.feature_lstm)
 
@@ -5876,7 +5876,7 @@ class ProposedDilatedConv_2_18_3FreezePos(nn.Module):
         return weight/(alpha+1e-8)
 
 class ProposedFreezePosDilatedConv_2_18_3(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(ProposedFreezePosDilatedConv_2_18_3, self).__init__()
         from models.dilated_convolutions.conv import DilatedConv
         self.input_dim=128
