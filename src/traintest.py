@@ -143,7 +143,7 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                 # logging_info(rank, 'warm-up learning rate is {:f} {:f}'.format(optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr']))
                 logging_info(rank, 'warm-up learning rate is {:f}'.format(optimizer.param_groups[0]['lr']))
 
-            audio_output, score_pred, energy_score = audio_model(audio_input)
+            audio_output, score_pred, energy_score, logmel = audio_model(audio_input)
 
             if isinstance(loss_fn, torch.nn.CrossEntropyLoss):
                 loss = loss_fn(audio_output, torch.argmax(labels.long(), axis=1))
@@ -159,7 +159,8 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                     loss = torch.mean(loss)
             # Can this work?
             # Ignore empty frames
-            score_mask = torch.mean((audio_input * args.dataset_std + args.dataset_mean).exp(), dim=-1, keepdim=True)
+            # TODO make sure this is working
+            score_mask = torch.mean((logmel * args.dataset_std + args.dataset_mean).exp(), dim=-1, keepdim=True)
             score_mask = score_mask < (torch.min(score_mask) + 1e-6)
             zero_loss_final = None
             std_loss_final = torch.tensor([0.0]).cuda(rank, non_blocking=True)
@@ -224,20 +225,14 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                     "zero-loss":float(zero_loss_meter.avg),
                     "speed-data":float(per_sample_data_time.avg),
                     "speed-total":float(per_sample_time.avg),
-                    "speed-dnn":float(per_sample_dnn_time.avg)}
+                    "speed-dnn":float(per_sample_dnn_time.avg)
+                    }
 
                     wandb.log(info, step=global_step)
+                    msg='Epoch: [{0}][{1}/{2}]\t Per Sample Total Time {per_sample_time.avg:.5f}\t Per Sample Data Time {per_sample_data_time.avg:.5f}\t Per Sample DNN Time {per_sample_dnn_time.avg:.5f}\t Train Loss {loss_meter.avg:.4f}\t std Loss {score_loss_meter.avg:.4f}\t zero Loss {zero_loss_meter.avg:.4f}\t energy Loss {energy_meter.avg:.4f}\t'.format(epoch, i, len(train_loader), per_sample_time=per_sample_time, per_sample_data_time=per_sample_data_time,per_sample_dnn_time=per_sample_dnn_time, loss_meter=loss_meter, score_loss_meter=score_loss_meter, zero_loss_meter=zero_loss_meter,energy_meter=energy_meter)
+                    logging_info(rank, msg)
+                    print(msg)
                     
-                    logging_info(rank, 'Epoch: [{0}][{1}/{2}]\t'
-                    'Per Sample Total Time {per_sample_time.avg:.5f}\t'
-                    'Per Sample Data Time {per_sample_data_time.avg:.5f}\t'
-                    'Per Sample DNN Time {per_sample_dnn_time.avg:.5f}\t'
-                    'Train Loss {loss_meter.avg:.4f}\t'
-                    'std Loss {score_loss_meter.avg:.4f}\t'
-                    'zero Loss {zero_loss_meter.avg:.4f}\t'
-                    'energy Loss {energy_meter.avg:.4f}\t'.format(
-                    epoch, i, len(train_loader), per_sample_time=per_sample_time, per_sample_data_time=per_sample_data_time,
-                        per_sample_dnn_time=per_sample_dnn_time, loss_meter=loss_meter, score_loss_meter=score_loss_meter, zero_loss_meter=zero_loss_meter,energy_meter=energy_meter))
                     if np.isnan(loss_meter.avg):
                         logging.error("training diverged...")
                         return
@@ -368,7 +363,7 @@ def validate(rank, n_gpus, audio_model, val_loader, args, epoch, eval_target=Fal
             batchsize = audio_input.size(0)
             audio_input = audio_input.to(device)  
             # compute output    
-            audio_output,_,_ = audio_model(audio_input) 
+            audio_output,_,_,_ = audio_model(audio_input) 
             predictions = audio_output.to('cpu').detach()   
             A_predictions.append(predictions)   
             A_targets.append(labels)    

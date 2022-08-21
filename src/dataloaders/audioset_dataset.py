@@ -48,13 +48,14 @@ def preemphasis(signal,coeff=0.97):
     return np.append(signal[0],signal[1:]-coeff*signal[:-1])
 
 class AudiosetDataset(Dataset):
-    def __init__(self, dataset_json_file, audio_conf, label_csv=None):
+    def __init__(self, dataset_json_file, audio_conf, label_csv=None, hop_ms=10):
         """
         Dataset that manages audio recordings
         :param audio_conf: Dictionary containing the audio loading and preprocessing settings
         :param dataset_json_file
         """
         self.datapath = dataset_json_file
+        self.hop_ms = hop_ms
         with open(dataset_json_file, 'r') as fp:
             data_json = json.load(fp)
 
@@ -117,11 +118,11 @@ class AudiosetDataset(Dataset):
                 if waveform1.shape[1] > waveform2.shape[1]:
                     # padding
                     temp_wav = torch.zeros(1, waveform1.shape[1])
-                    temp_wav[0, 0:waveform2.shape[1]] = waveform2
+                    temp_wav[0, :waveform2.shape[1]] = waveform2
                     waveform2 = temp_wav
                 else:
                     # cutting
-                    waveform2 = waveform2[0, 0:waveform1.shape[1]]
+                    waveform2 = waveform2[0, :waveform1.shape[1]]
 
             # sample lambda from uniform distribution
             #mix_lambda = random.random()
@@ -130,51 +131,26 @@ class AudiosetDataset(Dataset):
 
             mix_waveform = mix_lambda * waveform1 + (1 - mix_lambda) * waveform2
             waveform = mix_waveform - mix_waveform.mean()
-
         # torch.Size([1, 160000]) torch.Size([998, 128])
-        
-        # Mel spectrogram
-        fbank = torchaudio.compliance.kaldi.fbank(waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
-                                                  window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=10) # TODO
-        pad_val = -15.7
-        # Wavegram
-        # fbank,_ = self.dsp.wav_to_wavegram(waveform.unsqueeze(1), 7)
-        # fbank = fbank[0,...].permute(1,0)
-        # self.norm_mean, self.norm_std = 1e-5, 0.01
-        # pad_val = 0.0
-        
-        # Wavegram2
-        # fbank = waveform.reshape(..., 128)
-        # pad_val = 0.0
 
-        # Wavegram3
-        # buffer = []
-        # for i in range(128):
-        #     buffer.append(waveform[:, i::128])
-        # min_len = min([each.size(1) for each in buffer])
-        # for i in range(len(buffer)):
-        #     buffer[i] = buffer[i][:, :min_len]
-        # fbank = torch.cat(buffer, dim=0).permute(1, 0)
-        # pad_val = 0.0
-        # End
+        target_length = self.audio_conf.get('waveform_length')
+        n_samples = waveform.shape[1]
 
-        target_length = self.audio_conf.get('target_length')
-        n_frames = fbank.shape[0]
-
-        p = target_length - n_frames
+        p = target_length - n_samples
 
         # cut and pad
         if p > 0:
-            # m = torch.nn.ZeroPad2d((0, 0, 0, p))
-            fbank = torch.nn.functional.pad(fbank, (0, 0, 0, p), mode='constant', value=pad_val) 
-            # fbank = m(fbank)
+            waveform = torch.nn.functional.pad(waveform, (0, p), mode='constant', value=0) 
         elif p < 0:
-            fbank = fbank[0:target_length, :]
-
+            waveform = waveform[:, :target_length]
+        
+        assert waveform.size()[1] == target_length, "%s %s %s" % (n_samples, p, waveform.size())
+        
         if filename2 == None:
-            return fbank, 0, waveform
+            return None, 0, waveform
         else:
-            return fbank, mix_lambda, waveform
+            return None, mix_lambda, waveform
+    
 
     def __getitem__(self, index):
         """
@@ -232,45 +208,10 @@ class AudiosetDataset(Dataset):
                 label_indices[int(self.index_dict[label_str])] = 1.0
 
             label_indices = torch.FloatTensor(label_indices)
-        
-        # SpecAug, not do for eval set
-        fbank = fbank.exp()
-        assert torch.sum(fbank < 0) == 0
-        ############################### Spec Aug ####################################################
-        fbank = torch.transpose(fbank, 0, 1)
-        # this is just to satisfy new torchaudio version.
-        fbank = fbank.unsqueeze(0)
-        # torch.Size([1, 128, 1056])
-        if self.freqm != 0:
-            fbank = self.frequency_masking(fbank, self.freqm)
-            # fbank = self.frequency_fading(fbank, self.freqm * 2)
-        if self.timem != 0:
-            fbank = self.time_masking(fbank, self.timem)
-            # fbank = self.time_fading(fbank, self.timem * 2)
-        #############################################################################################
-        fbank = (fbank+1e-7).log()
-        # squeeze back
-        fbank = fbank.squeeze(0)
-        fbank = torch.transpose(fbank, 0, 1)
-
-        # normalize the input for both training and test
-        if not self.skip_norm:
-            fbank = (fbank - self.norm_mean) / (self.norm_std)
-        # skip normalization the input if you are trying to get the normalization stats.
-        else:
-            pass
-
-        if self.noise == True:
-            fbank = fbank + torch.rand(fbank.shape[0], fbank.shape[1]) * np.random.rand() / 10
-            fbank = torch.roll(fbank, np.random.randint(-10, 10), 0)
-
-        # the output fbank shape is [time_frame_num, frequency_bins], e.g., [1024, 128]
-
-        # the output fbank shape is [time_frame_num, frequency_bins], e.g., [1024, 128]
-        if(self.mode == "evaluation"):
-            return fbank, label_indices, os.path.basename(datum['wav'])
-        else:
-            return fbank, label_indices, os.path.basename(datum['wav'])
+        # if self.noise == True:
+        #     fbank = fbank + torch.rand(fbank.shape[0], fbank.shape[1]) * np.random.rand() / 10
+        #     fbank = torch.roll(fbank, np.random.randint(-10, 10), 0)
+        return waveform, label_indices, os.path.basename(datum['wav'])
 
     def random_uniform(self, start, end):
         val = torch.rand(1).item()

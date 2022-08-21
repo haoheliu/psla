@@ -2,6 +2,7 @@ from turtle import forward
 from unicodedata import bidirectional
 import torch.nn as nn
 import torch
+import torchlibrosa as tl
 
 if __name__ == '__main__':
     from HigherModels import *
@@ -69,8 +70,29 @@ class MBNet(nn.Module):
         return out
 
 class EffNetAttention(nn.Module):
-    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False, hop_size=160, mean=None, std=None):
         super(EffNetAttention, self).__init__()
+        
+        sample_rate = 16000
+        win_length = 512
+        hop_length = hop_size
+        n_mels = 128
+        
+        self.mean = mean
+        self.std = std
+        
+        from torchlibrosa.augmentation import SpecAugmentation
+        self.specaug=SpecAugmentation(time_drop_width=192, time_stripes_num=1, freq_drop_width=48, freq_stripes_num=1)
+        self.feature_extractor = torch.nn.Sequential(
+                        tl.Spectrogram(
+                            hop_length=hop_length,
+                            win_length=win_length,
+                        ), tl.LogmelFilterBank(
+                            sr=sample_rate,
+                            n_mels=n_mels,
+                            is_log=False, # Default is true
+                        ))
+        
         self.middim = [1280, 1280, 1408, 1536, 1792, 2048, 2304, 2560]
         self.input_seq_length = input_seq_length
         print("Use %s with preserve ratio of %s" % (str(sampler), str(preserve_ratio)))
@@ -116,10 +138,25 @@ class EffNetAttention(nn.Module):
         self.effnet._fc = nn.Identity()
         self.batch_idx=0
         self.rank = None
+        self.data = None
+
+    def feature_extraction(self, x):
+        mel = self.feature_extractor(x.squeeze(1))
+        mel = self.specaug(mel)
+        mel = mel.squeeze(1)
+        return (torch.log(mel + 1e-7) - self.mean) / self.std
 
     def forward(self, x, nframes=1056):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
-        ret = self.neural_sampler(x)
+        logmel = self.feature_extraction(x)
+        
+        # if(self.data is None):
+        #     self.data = logmel.flatten()
+        # else:
+        #     self.data = torch.cat([self.data, logmel.flatten()])
+        # print(torch.mean(self.data), torch.std(self.data))
+        
+        ret = self.neural_sampler(logmel)
         x, score, energy = ret['feature'], ret['score'], ret['energy']
         
         if(self.rank == 0 and self.batch_idx % 2000 == 0 and self.training):
@@ -131,8 +168,8 @@ class EffNetAttention(nn.Module):
         x = x.transpose(2,3)
         out, norm_att = self.attention(x)
         if(self.training): self.batch_idx += 1
-        return out, score, energy
-
+        return out, score, energy, logmel
+    
 def test_model():
     input_tdim = 3000
     from thop import clever_format
