@@ -29,6 +29,8 @@ def logging_info(rank, msg):
     if(rank == 0):
         logging.info(msg)
 
+DATA = None
+
 def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
     # if n_gpus > 1:
     #     train_loader.batch_sampler.set_epoch(epoch)
@@ -129,6 +131,14 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
             audio_input = audio_input.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
 
+            # If you want to measure the mean and std of the dataset
+            # global DATA
+            # if(DATA is None):
+            #     DATA = audio_input.flatten()
+            # else:
+            #     DATA = torch.cat([DATA, audio_input.flatten()])
+            # print(torch.mean(DATA), torch.std(DATA))
+            
             data_time.update(time.time() - end_time)
             per_sample_data_time.update((time.time() - end_time) / audio_input.shape[0])
             dnn_start_time = time.time()
@@ -228,16 +238,9 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
 
                     wandb.log(info, step=global_step)
                     
-                    logging_info(rank, 'Epoch: [{0}][{1}/{2}]\t'
-                    'Per Sample Total Time {per_sample_time.avg:.5f}\t'
-                    'Per Sample Data Time {per_sample_data_time.avg:.5f}\t'
-                    'Per Sample DNN Time {per_sample_dnn_time.avg:.5f}\t'
-                    'Train Loss {loss_meter.avg:.4f}\t'
-                    'std Loss {score_loss_meter.avg:.4f}\t'
-                    'zero Loss {zero_loss_meter.avg:.4f}\t'
-                    'energy Loss {energy_meter.avg:.4f}\t'.format(
-                    epoch, i, len(train_loader), per_sample_time=per_sample_time, per_sample_data_time=per_sample_data_time,
-                        per_sample_dnn_time=per_sample_dnn_time, loss_meter=loss_meter, score_loss_meter=score_loss_meter, zero_loss_meter=zero_loss_meter,energy_meter=energy_meter))
+                    msg='Epoch: [{0}][{1}/{2}]\t Per Sample Total Time {per_sample_time.avg:.5f}\t Per Sample Data Time {per_sample_data_time.avg:.5f}\t Per Sample DNN Time {per_sample_dnn_time.avg:.5f}\t Train Loss {loss_meter.avg:.4f}\t std Loss {score_loss_meter.avg:.4f}\t zero Loss {zero_loss_meter.avg:.4f}\t energy Loss {energy_meter.avg:.4f}\t'.format(epoch, i, len(train_loader), per_sample_time=per_sample_time, per_sample_data_time=per_sample_data_time,per_sample_dnn_time=per_sample_dnn_time, loss_meter=loss_meter, score_loss_meter=score_loss_meter, zero_loss_meter=zero_loss_meter,energy_meter=energy_meter)
+                    logging_info(rank, msg)
+                    print(msg)
                     if np.isnan(loss_meter.avg):
                         logging.error("training diverged...")
                         return

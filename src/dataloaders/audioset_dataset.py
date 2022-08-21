@@ -48,7 +48,7 @@ def preemphasis(signal,coeff=0.97):
     return np.append(signal[0],signal[1:]-coeff*signal[:-1])
 
 class AudiosetDataset(Dataset):
-    def __init__(self, dataset_json_file, audio_conf, label_csv=None):
+    def __init__(self, dataset_json_file, audio_conf, label_csv=None, hop_ms=10):
         """
         Dataset that manages audio recordings
         :param audio_conf: Dictionary containing the audio loading and preprocessing settings
@@ -57,7 +57,7 @@ class AudiosetDataset(Dataset):
         self.datapath = dataset_json_file
         with open(dataset_json_file, 'r') as fp:
             data_json = json.load(fp)
-
+        self.hop_ms=hop_ms
         self.data = data_json['data']
         self.audio_conf = audio_conf
         logging.info('---------------the {:s} dataloader---------------'.format(self.audio_conf.get('mode')))
@@ -135,7 +135,7 @@ class AudiosetDataset(Dataset):
         
         # Mel spectrogram
         fbank = torchaudio.compliance.kaldi.fbank(waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
-                                                  window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=10) # TODO
+                                                  window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=self.hop_ms) # TODO
         pad_val = -15.7
         # Wavegram
         # fbank,_ = self.dsp.wav_to_wavegram(waveform.unsqueeze(1), 7)
@@ -200,8 +200,8 @@ class AudiosetDataset(Dataset):
                     fbank, mix_lambda, waveform = self._wav2fbank(datum['wav'], mix_datum['wav'])
                     break
                 except:
-                    print("error reading file during mixup", datum['wav'], mix_datum['wav'])
-                    logging.warning("Error reading file: %s, %s" % (datum['wav'], mix_datum['wav']))
+                    # print("error reading file during mixup", datum['wav'], mix_datum['wav'])
+                    # logging.warning("Error reading file: %s, %s" % (datum['wav'], mix_datum['wav']))
                     index += 1
                     index = index % len(self.data)
 
@@ -223,8 +223,8 @@ class AudiosetDataset(Dataset):
                     fbank, mix_lambda, waveform = self._wav2fbank(datum['wav'])
                     break
                 except Exception as e:
-                    print("error reading file", datum['wav'])
-                    logging.warning("Error reading file: %s" % datum['wav'])
+                    # print("error reading file", datum['wav'])
+                    # logging.warning("Error reading file: %s" % datum['wav'])
                     index += 1
                     index = index % len(self.data)
 

@@ -7,6 +7,7 @@ import pickle
 import sys
 from collections import OrderedDict
 import time
+from turtle import update
 import torch
 import shutil
 basepath = os.path.dirname(os.path.dirname(sys.path[0]))
@@ -62,6 +63,13 @@ def adaptive_batchsize(args):
     logging.info("Batchsize: %s" % args.batch_size)
     return args
 
+def update_target_length_preserve_ratio(args):
+    args.preserve_ratio = args.preserve_ratio * (args.hop_ms / 10) # The 10ms one is the baseline
+    args.target_length = int(args.target_length * (10 / args.hop_ms))
+    msg = "Hop length %s ms; Target length %s; Preserve ratio: %s; " % (args.hop_ms, args.target_length, args.preserve_ratio)
+    print(msg)
+    return args
+    
 def main():
     print(os.getcwd())
     # I/O args
@@ -126,7 +134,7 @@ def main():
     parser.add_argument("--apply_zero_loss_threshold", type=float, default=0.5)
     parser.add_argument("--lambda_zero_loss", type=float, default=0.01)
     parser.add_argument("--learn_pos_emb", type=ast.literal_eval, default=False)
-
+    parser.add_argument("--hop_ms", type=int, default=10, help="The hop size when calculating STFT (ms)")
     args = parser.parse_args()
     
     seed_everything(int(args.seed)) # TODO put it where?
@@ -136,6 +144,7 @@ def main():
     n_gpus = torch.cuda.device_count()
     # args.batch_size=args.batch_size*n_gpus
     args = adaptive_batchsize(args)
+    args = update_target_length_preserve_ratio(args)
     if  n_gpus > 1:
         mp.spawn(run, nprocs=n_gpus, args=(n_gpus, args,),join=True)
     else:
@@ -204,14 +213,14 @@ def run(rank, n_gpus, args):
         if(n_gpus>1):
             sampler = DistributedSamplerWrapper(sampler, num_replicas=n_gpus, rank=rank, shuffle=True)
             
-        dataset = dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf)
+        dataset = dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf, hop_ms=args.hop_ms)
         train_loader = torch.utils.data.DataLoader(
             dataset,
             batch_size=args.batch_size, sampler=sampler, num_workers=args.num_workers, pin_memory=False, drop_last=True, worker_init_fn=seed_worker,generator=g)
         logging.info("The length of the dataset is %s, the length of the dataloader is %s, the batchsize is %s" % (len(dataset), len(train_loader), args.batch_size))
     else:
         logging.info('balanced sampler is not used')
-        dataset = dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf)
+        dataset = dataloaders.AudiosetDataset(args.data_train, label_csv=args.label_csv, audio_conf=audio_conf, hop_ms=args.hop_ms)
         
         if(n_gpus > 1):
             sampler = DistributedSampler(dataset, num_replicas=n_gpus, rank=rank, shuffle=True)
@@ -227,12 +236,12 @@ def run(rank, n_gpus, args):
     if(rank==0):
         # Drop last here is interesting
         val_loader = torch.utils.data.DataLoader(
-            dataloaders.AudiosetDataset(args.data_val, label_csv=args.label_csv, audio_conf=val_audio_conf),
+            dataloaders.AudiosetDataset(args.data_val, label_csv=args.label_csv, audio_conf=val_audio_conf, hop_ms=args.hop_ms),
             batch_size=args.batch_size*2, shuffle=False, num_workers=16, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
 
         if args.data_eval != None:
             eval_loader = torch.utils.data.DataLoader(
-                dataloaders.AudiosetDataset(args.data_eval, label_csv=args.label_csv, audio_conf=val_audio_conf),
+                dataloaders.AudiosetDataset(args.data_eval, label_csv=args.label_csv, audio_conf=val_audio_conf, hop_ms=args.hop_ms),
                 batch_size=args.batch_size*2, shuffle=False, num_workers=16, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
 
     if args.model == 'efficientnet':
