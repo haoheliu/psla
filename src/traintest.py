@@ -154,7 +154,7 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                 if(args.reweight_loss):
                     loss_weight = eval(args.weight_func)(labels, args.graph_weight_path, beta=args.beta)
                     loss_weight = calculate_class_weight(labels, args.graph_weight_path, beta=args.beta)
-                    loss = (torch.mean(loss * loss_weight) + torch.mean(loss)) / 2
+                    loss = torch.mean(loss * loss_weight) + torch.mean(loss)
                 else:
                     loss = torch.mean(loss)
             # Can this work?

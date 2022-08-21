@@ -60,7 +60,7 @@ class MBNet(nn.Module):
         self.model.features[0][0] = torch.nn.Conv2d(1, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
         self.model.classifier = torch.nn.Linear(in_features=1280, out_features=label_dim, bias=True)
 
-    def forward(self, x, nframes):
+    def forward(self, x, nframes=1056):
         # expect input x = (batch_size, time_frame_num, frequency_bins), e.g., (12, 1024, 128)
         x = x.unsqueeze(1)
         x = x.transpose(2, 3)
@@ -76,6 +76,7 @@ class EffNetAttention(nn.Module):
         print("Use %s with preserve ratio of %s" % (str(sampler), str(preserve_ratio)))
         self.learn_pos_emb = learn_pos_emb
         self.alpha = alpha
+
         self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha, self.learn_pos_emb)
         
         if pretrain == False:
@@ -134,14 +135,20 @@ class EffNetAttention(nn.Module):
 
 def test_model():
     input_tdim = 3000
-    #ast_mdl = ResNetNewFullAttention(pretrain=False)
-    psla_mdl = EffNetAttention(pretrain=False, b=0, head_num=0)
-    # input a batch of 10 spectrogram, each with 100 time frames and 128 frequency bins
+    from thop import clever_format
+    from thop import profile
+
+    # model = MBNet(pretrain=False)
+    model = EffNetAttention(pretrain=False, b=0, head_num=0, sampler=NeuralSamplerLargeEnergy, preserve_ratio=0.25) # 2.688G 717.103K
+    
     test_input = torch.rand([10, input_tdim, 128])
-    test_output = psla_mdl(test_input)
+    flops, params = profile(model, inputs=(test_input, ))
+    flops, params = clever_format([flops, params], "%.3f")
+
+    print(flops, params)
     # output should be in shape [10, 527], i.e., 10 samples, each with prediction of 527 classes.
     import ipdb; ipdb.set_trace()
 
 if __name__ == '__main__':
-    test_pos_emb_2d_v2()
+    test_model()
     

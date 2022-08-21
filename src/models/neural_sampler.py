@@ -1,5 +1,8 @@
 import sys
 sys.path.append("/media/Disk_HDD/haoheliu/projects/psla/src")
+sys.path.append("/Volumes/nobackup-scratch4weeks/hl01486/project/psla/src")
+sys.path.append("/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/src")
+
 
 import torch
 from turtle import forward
@@ -8,14 +11,9 @@ import torch.nn as nn
 import torch
 import math
 from positional_encodings.torch_encodings import PositionalEncoding1D, PositionalEncoding2D, PositionalEncoding3D, Summer
-
+from functorch import vmap
 import logging
 import os
-
-# from HigherModels import *
-# from neural_sampler import *
-# from pooling import Pooling_layer
-# from transformerencoder.model import TextEncoder
 
 from .HigherModels import *
 from .neural_sampler import *
@@ -23,6 +21,7 @@ from .pooling import Pooling_layer
 
 RESCALE_INTERVEL_MIN=1e-4
 RESCALE_INTERVEL_MAX=1-1e-4
+# GROUP_BATCH=2
 
 def init_gru(rnn):
     """Initialize a GRU layer. """
@@ -571,7 +570,7 @@ class NewAlgoEnergy(nn.Module):
         ret['score']=score
         return ret
 
-# Use DNN
+# 0.35
 class BaselineAdaAvgPool(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(BaselineAdaAvgPool, self).__init__()
@@ -658,6 +657,96 @@ class BaselineAdaAvgPool(nn.Module):
                     score[i][axis[i]] += intervel * alpha
         ####################################################################
         return score, total_length
+    
+# TODO
+class BaselineAdaAvgMaxPool(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+        super(BaselineAdaAvgMaxPool, self).__init__()
+        self.input_dim=128
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.feature_channels=1
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
+        self.use_pos_emb = True
+
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        
+        self.pooling = torch.nn.AdaptiveAvgPool1d(self.output_seq_length)
+        self.max_pooling = torch.nn.AdaptiveMaxPool1d(self.output_seq_length)
+
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        ret = {}
+        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+
+        score = torch.ones_like(x[...,0:1]).to(x.device)
+
+        # ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
+        ret['feature'] = (self.pooling(x.permute(0,2,1)).permute(0,2,1).unsqueeze(1) + self.max_pooling(x.permute(0,2,1)).permute(0,2,1).unsqueeze(1)) / 2
+
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        ret['score'],_=self.score_norm(score, self.output_seq_length)
+        ret['score_loss']=torch.tensor([0.0]).to(x.device)
+        return ret
+
+    def visualize(self, ret):
+        x, y, score, energy = ret['x'], ret['feature'], ret['score'], ret['energy']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(411)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(412)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(413)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(414)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def score_norm(self, score, total_length):
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < RESCALE_INTERVEL_MAX, score > RESCALE_INTERVEL_MIN) # TODO here 0.1 or RESCALE_INTERVEL_MIN
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        return score, total_length
+    
     
 # Use DNN
 class NewAlgoDilatedConv1dPlusEnergy(nn.Module):
@@ -807,7 +896,1057 @@ class NewAlgoDilatedConv1dPlusEnergy(nn.Module):
         ret['score']=score
         return ret
 
+# TODO
+class BaselineConstantScoreMaxPoolScale(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+        super(BaselineConstantScoreMaxPoolScale, self).__init__()
+        self.input_dim=128
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.feature_channels=2
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
+        self.use_pos_emb = True
 
+        from models.dilated_convolutions_1d.conv import DilatedConv
+
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding")
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
+
+    def calculate_max_pool(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        tensor_list = []
+        for i in range(weight.size(-1)):
+            weight_row = weight[:,:,i].unsqueeze(-1)
+            tensor = (feature * weight_row).permute(0,2,1)
+            tensor_list.append(torch.nn.functional.max_pool1d(tensor, kernel_size=self.input_seq_length).permute(0,2,1))
+        return torch.cat(tensor_list, dim=1)
+
+    def calculate_max_pool_fast(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, seqlen, compressed_len = weight.size()
+        bs, seqlen, mel_bins = feature.size()
+        expanded_feature = feature.unsqueeze(2).expand(bs, seqlen, compressed_len, mel_bins)
+        expanded_feature = (expanded_feature * weight.unsqueeze(-1)).permute(0,2,1,3)
+        tensor = torch.nn.functional.max_pool2d(expanded_feature, kernel_size=(self.input_seq_length, 1)).squeeze(2)
+        return tensor
+    
+    def calculate_max_pool_fast_grouped(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, _, _ = weight.size()
+        start_idx = 0
+        tensor_list = []
+        while(start_idx < bs):
+            weight_batch, feature_batch = weight[start_idx:start_idx+1], feature[start_idx:start_idx+1]
+            if(weight_batch.size(0) == 0): break
+            tensor_list.append(self.calculate_max_pool_fast(weight_batch, feature_batch))
+            start_idx += 1
+        return torch.cat(tensor_list, dim=0)
+    
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+
+        score = torch.ones_like(x[...,0:1]).to(x.device)
+        
+        ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy, feature_maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'], ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(feature_maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def score_norm(self, score, total_length):
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < RESCALE_INTERVEL_MAX, score > RESCALE_INTERVEL_MIN) # TODO here 0.1 or RESCALE_INTERVEL_MIN
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        return score, total_length
+
+    def locate_first_and_last_position(self, mask):
+        """Locate the first non-negative in a row, and the element before the last non-negative element in a row
+
+        Args:
+            mask (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        bs, orig_len, target_len = mask.size()
+        
+        assert orig_len >= target_len
+
+        weight = torch.tensor([-1.0,1.0]).expand(target_len,-1).to(mask.device)
+        weight = weight.unsqueeze(1)
+        value = torch.nn.functional.conv1d(mask.permute(0,2,1).float(), weight, bias=None, stride=1, padding=0, dilation=1, groups=target_len)
+        value = torch.nn.functional.pad(value, (1,0))
+        value = value.permute(0,2,1)
+        return value == 1, value == -1
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        
+        # Normalize the socre value
+        score, total_length = self.score_norm(score, total_length)
+
+        # Monotonic Expansion
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # Get the masked weight
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+
+        # Make the sum or each row to one
+        weight_sum = torch.sum(weight, dim=1, keepdim=True)
+        one_minus_weight_sum = 1-weight_sum
+        one_minus_weight_sum_cumsum = torch.cumsum(one_minus_weight_sum, dim=2)
+        need_minus, need_add = self.locate_first_and_last_position(mask)
+        need_minus = need_minus[:,:,1:] * one_minus_weight_sum_cumsum[:,:,:-1]
+        need_minus = torch.nn.functional.pad(need_minus,(1,0))
+        need_add = need_add * one_minus_weight_sum_cumsum
+        weight = weight - need_minus + need_add
+
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        
+        # Ceil the weight, if greater than 0, be 1
+        tensor_list_maxpool = self.calculate_max_pool_fast_grouped(weight / self.preserv_ratio, feature)
+        tensor_list = (tensor_list + tensor_list_maxpool) / 2
+        
+        pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+
+        ret['emb'] = pos_emb
+        ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
+        ret['feature_maxpool'] = tensor_list_maxpool
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return rets
+
+# 0.64
+class NewAlgoDilatedConv1dMaxPoolCeil(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+        super(NewAlgoDilatedConv1dMaxPoolCeil, self).__init__()
+        self.input_dim=128
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.feature_channels=2
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
+        self.use_pos_emb = True
+
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=2, input_size=self.input_seq_length, kernel_size=3, stride=1)
+        
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding")
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
+
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def score_norm(self, score, total_length):
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < RESCALE_INTERVEL_MAX, score > RESCALE_INTERVEL_MIN) # TODO here 0.1 or RESCALE_INTERVEL_MIN
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        return score, total_length
+
+    def locate_first_and_last_position(self, mask):
+        """Locate the first non-negative in a row, and the element before the last non-negative element in a row
+
+        Args:
+            mask (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        bs, orig_len, target_len = mask.size()
+        
+        assert orig_len >= target_len
+
+        weight = torch.tensor([-1.0,1.0]).expand(target_len,-1).to(mask.device)
+        weight = weight.unsqueeze(1)
+        value = torch.nn.functional.conv1d(mask.permute(0,2,1).float(), weight, bias=None, stride=1, padding=0, dilation=1, groups=target_len)
+        value = torch.nn.functional.pad(value, (1,0))
+        value = value.permute(0,2,1)
+        return value == 1, value == -1
+    
+    # def calculate_max_pool(self, weight, feature):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     tensor_list = []
+    #     for i in range(weight.size(-1)):
+    #         weight_row = weight[:,:,i].unsqueeze(-1)
+    #         tensor = (feature * weight_row).permute(0,2,1)
+    #         tensor_list.append(torch.nn.functional.max_pool1d(tensor, kernel_size=self.input_seq_length).permute(0,2,1))
+    #     return torch.cat(tensor_list, dim=1)
+
+    def calculate_max_pool_fast(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, seqlen, compressed_len = weight.size()
+        bs, seqlen, mel_bins = feature.size()
+        expanded_feature = feature.unsqueeze(2).expand(bs, seqlen, compressed_len, mel_bins)
+        expanded_feature = (expanded_feature * weight.unsqueeze(-1)).permute(0,2,1,3)
+        tensor = torch.nn.functional.max_pool2d(expanded_feature, kernel_size=(self.input_seq_length, 1)).squeeze(2)
+        return tensor
+    
+    # def calculate_max_pool_slow(self, weight, feature):
+    #     bs, seqlen, compressed_len = weight.size()
+    #     bs, seqlen, mel_bins = feature.size()
+    #     weight = weight[0]
+    #     feature = feature[0]
+    #     assert bs == 1
+    #     tensor_list = []
+    #     for i in range(compressed_len):
+    #         non_zero_feature = feature[weight[:,i] > 0]
+    #         pooled_feature = torch.nn.functional.max_pool1d(non_zero_feature.permute(1,0), kernel_size=(non_zero_feature.size(0))).permute(1,0).unsqueeze(0)
+    #         tensor_list.append(pooled_feature)
+    #     return torch.cat(tensor_list, dim=1)
+    
+    def calculate_max_pool_fast_grouped(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, _, _ = weight.size()
+        start_idx = 0
+        tensor_list = []
+        while(start_idx < bs):
+            weight_batch, feature_batch = weight[start_idx:start_idx+1], feature[start_idx:start_idx+1]
+            if(weight_batch.size(0) == 0): break
+            tensor_list.append(self.calculate_max_pool_fast(weight_batch, feature_batch))
+            start_idx += 1
+        return torch.cat(tensor_list, dim=0)
+
+    # def _max_pool_dimension(self, weight, feature=None):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     weight_row = weight.unsqueeze(-1)
+    #     tensor = (feature * weight_row).permute(0,2,1)
+    #     return torch.max(tensor, dim=-1)[0]
+
+    # def calculate_max_pool_fast_efficient(self, weight, feature):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     tensor = vmap(self._max_pool_dimension, in_dims=-1, out_dims=-1)(weight, feature=feature)
+    #     return tensor.permute(0,2,1)
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        
+        # Normalize the socre value
+        score, total_length = self.score_norm(score, total_length)
+
+        # Monotonic Expansion
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # Get the masked weight
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+
+        # Make the sum or each row to one
+        weight_sum = torch.sum(weight, dim=1, keepdim=True)
+        one_minus_weight_sum = 1-weight_sum
+        one_minus_weight_sum_cumsum = torch.cumsum(one_minus_weight_sum, dim=2)
+        need_minus, need_add = self.locate_first_and_last_position(mask)
+        need_minus = need_minus[:,:,1:] * one_minus_weight_sum_cumsum[:,:,:-1]
+        need_minus = torch.nn.functional.pad(need_minus,(1,0))
+        need_add = need_add * one_minus_weight_sum_cumsum
+        weight = weight - need_minus + need_add
+
+        # [3, 105, 128]    
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        # tensor_list_maxpool=tensor_list
+        # tensor_list_maxpool = self.calculate_max_pool(weight, feature)
+        tensor_list_maxpool = self.calculate_max_pool_fast_grouped(weight > 0, feature)
+        # tensor_list_maxpool = self.calculate_max_pool_fast(weight, feature)
+        # tensor_list_maxpool = self.calculate_max_pool_fast_efficient(weight, feature)
+        tensor_list = (tensor_list + tensor_list_maxpool) / 2
+        
+        pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        ret['emb'] = pos_emb
+        ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=tensor_list_maxpool
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret 
+    
+# 0.64
+class NewAlgoDilatedConv1dMaxPoolScaleCh(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+        super(NewAlgoDilatedConv1dMaxPoolScaleCh, self).__init__()
+        self.input_dim=128
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.feature_channels=3
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
+        self.use_pos_emb = True
+
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=2, input_size=self.input_seq_length, kernel_size=3, stride=1)
+        
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding")
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
+
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def score_norm(self, score, total_length):
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < RESCALE_INTERVEL_MAX, score > RESCALE_INTERVEL_MIN) # TODO here 0.1 or RESCALE_INTERVEL_MIN
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        return score, total_length
+
+    def locate_first_and_last_position(self, mask):
+        """Locate the first non-negative in a row, and the element before the last non-negative element in a row
+
+        Args:
+            mask (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        bs, orig_len, target_len = mask.size()
+        
+        assert orig_len >= target_len
+
+        weight = torch.tensor([-1.0,1.0]).expand(target_len,-1).to(mask.device)
+        weight = weight.unsqueeze(1)
+        value = torch.nn.functional.conv1d(mask.permute(0,2,1).float(), weight, bias=None, stride=1, padding=0, dilation=1, groups=target_len)
+        value = torch.nn.functional.pad(value, (1,0))
+        value = value.permute(0,2,1)
+        return value == 1, value == -1
+    
+    # def calculate_max_pool(self, weight, feature):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     tensor_list = []
+    #     for i in range(weight.size(-1)):
+    #         weight_row = weight[:,:,i].unsqueeze(-1)
+    #         tensor = (feature * weight_row).permute(0,2,1)
+    #         tensor_list.append(torch.nn.functional.max_pool1d(tensor, kernel_size=self.input_seq_length).permute(0,2,1))
+    #     return torch.cat(tensor_list, dim=1)
+
+    def calculate_max_pool_fast(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, seqlen, compressed_len = weight.size()
+        bs, seqlen, mel_bins = feature.size()
+        expanded_feature = feature.unsqueeze(2).expand(bs, seqlen, compressed_len, mel_bins)
+        expanded_feature = (expanded_feature * weight.unsqueeze(-1)).permute(0,2,1,3)
+        tensor = torch.nn.functional.max_pool2d(expanded_feature, kernel_size=(self.input_seq_length, 1)).squeeze(2)
+        return tensor
+    
+    # def calculate_max_pool_slow(self, weight, feature):
+    #     bs, seqlen, compressed_len = weight.size()
+    #     bs, seqlen, mel_bins = feature.size()
+    #     weight = weight[0]
+    #     feature = feature[0]
+    #     assert bs == 1
+    #     tensor_list = []
+    #     for i in range(compressed_len):
+    #         non_zero_feature = feature[weight[:,i] > 0]
+    #         pooled_feature = torch.nn.functional.max_pool1d(non_zero_feature.permute(1,0), kernel_size=(non_zero_feature.size(0))).permute(1,0).unsqueeze(0)
+    #         tensor_list.append(pooled_feature)
+    #     return torch.cat(tensor_list, dim=1)
+    
+    def calculate_max_pool_fast_grouped(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, _, _ = weight.size()
+        start_idx = 0
+        tensor_list = []
+        while(start_idx < bs):
+            weight_batch, feature_batch = weight[start_idx:start_idx+1], feature[start_idx:start_idx+1]
+            if(weight_batch.size(0) == 0): break
+            tensor_list.append(self.calculate_max_pool_fast(weight_batch, feature_batch))
+            start_idx += 1
+        return torch.cat(tensor_list, dim=0)
+
+    # def _max_pool_dimension(self, weight, feature=None):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     weight_row = weight.unsqueeze(-1)
+    #     tensor = (feature * weight_row).permute(0,2,1)
+    #     return torch.max(tensor, dim=-1)[0]
+
+    # def calculate_max_pool_fast_efficient(self, weight, feature):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     tensor = vmap(self._max_pool_dimension, in_dims=-1, out_dims=-1)(weight, feature=feature)
+    #     return tensor.permute(0,2,1)
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        
+        # Normalize the socre value
+        score, total_length = self.score_norm(score, total_length)
+
+        # Monotonic Expansion
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # Get the masked weight
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+
+        # Make the sum or each row to one
+        weight_sum = torch.sum(weight, dim=1, keepdim=True)
+        one_minus_weight_sum = 1-weight_sum
+        one_minus_weight_sum_cumsum = torch.cumsum(one_minus_weight_sum, dim=2)
+        need_minus, need_add = self.locate_first_and_last_position(mask)
+        need_minus = need_minus[:,:,1:] * one_minus_weight_sum_cumsum[:,:,:-1]
+        need_minus = torch.nn.functional.pad(need_minus,(1,0))
+        need_add = need_add * one_minus_weight_sum_cumsum
+        weight = weight - need_minus + need_add
+
+        # [3, 105, 128]    
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        # tensor_list_maxpool=tensor_list
+        # tensor_list_maxpool = self.calculate_max_pool(weight, feature)
+        tensor_list_maxpool = self.calculate_max_pool_fast_grouped(weight/self.preserv_ratio, feature)
+        # tensor_list_maxpool = self.calculate_max_pool_fast(weight, feature)
+        # tensor_list_maxpool = self.calculate_max_pool_fast_efficient(weight, feature)
+        tensor_list = tensor_list
+        
+        pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        ret['emb'] = pos_emb
+        ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1), tensor_list_maxpool.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=tensor_list_maxpool
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret 
+    
+# 0.64
+class NewAlgoDilatedConv1dMaxPoolScale(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+        super(NewAlgoDilatedConv1dMaxPoolScale, self).__init__()
+        self.input_dim=128
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.feature_channels=2
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
+        self.use_pos_emb = True
+
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=2, input_size=self.input_seq_length, kernel_size=3, stride=1)
+        
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding")
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
+
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def score_norm(self, score, total_length):
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < RESCALE_INTERVEL_MAX, score > RESCALE_INTERVEL_MIN) # TODO here 0.1 or RESCALE_INTERVEL_MIN
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        return score, total_length
+
+    def locate_first_and_last_position(self, mask):
+        """Locate the first non-negative in a row, and the element before the last non-negative element in a row
+
+        Args:
+            mask (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        bs, orig_len, target_len = mask.size()
+        
+        assert orig_len >= target_len
+
+        weight = torch.tensor([-1.0,1.0]).expand(target_len,-1).to(mask.device)
+        weight = weight.unsqueeze(1)
+        value = torch.nn.functional.conv1d(mask.permute(0,2,1).float(), weight, bias=None, stride=1, padding=0, dilation=1, groups=target_len)
+        value = torch.nn.functional.pad(value, (1,0))
+        value = value.permute(0,2,1)
+        return value == 1, value == -1
+    
+    # def calculate_max_pool(self, weight, feature):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     tensor_list = []
+    #     for i in range(weight.size(-1)):
+    #         weight_row = weight[:,:,i].unsqueeze(-1)
+    #         tensor = (feature * weight_row).permute(0,2,1)
+    #         tensor_list.append(torch.nn.functional.max_pool1d(tensor, kernel_size=self.input_seq_length).permute(0,2,1))
+    #     return torch.cat(tensor_list, dim=1)
+
+    def calculate_max_pool_fast(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, seqlen, compressed_len = weight.size()
+        bs, seqlen, mel_bins = feature.size()
+        expanded_feature = feature.unsqueeze(2).expand(bs, seqlen, compressed_len, mel_bins)
+        expanded_feature = (expanded_feature * weight.unsqueeze(-1)).permute(0,2,1,3)
+        tensor = torch.nn.functional.max_pool2d(expanded_feature, kernel_size=(self.input_seq_length, 1)).squeeze(2)
+        return tensor
+    
+    # def calculate_max_pool_slow(self, weight, feature):
+    #     bs, seqlen, compressed_len = weight.size()
+    #     bs, seqlen, mel_bins = feature.size()
+    #     weight = weight[0]
+    #     feature = feature[0]
+    #     assert bs == 1
+    #     tensor_list = []
+    #     for i in range(compressed_len):
+    #         non_zero_feature = feature[weight[:,i] > 0]
+    #         pooled_feature = torch.nn.functional.max_pool1d(non_zero_feature.permute(1,0), kernel_size=(non_zero_feature.size(0))).permute(1,0).unsqueeze(0)
+    #         tensor_list.append(pooled_feature)
+    #     return torch.cat(tensor_list, dim=1)
+    
+    def calculate_max_pool_fast_grouped(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, _, _ = weight.size()
+        start_idx = 0
+        tensor_list = []
+        while(start_idx < bs):
+            weight_batch, feature_batch = weight[start_idx:start_idx+1], feature[start_idx:start_idx+1]
+            if(weight_batch.size(0) == 0): break
+            tensor_list.append(self.calculate_max_pool_fast(weight_batch, feature_batch))
+            start_idx += 1
+        return torch.cat(tensor_list, dim=0)
+
+    # def _max_pool_dimension(self, weight, feature=None):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     weight_row = weight.unsqueeze(-1)
+    #     tensor = (feature * weight_row).permute(0,2,1)
+    #     return torch.max(tensor, dim=-1)[0]
+
+    # def calculate_max_pool_fast_efficient(self, weight, feature):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     tensor = vmap(self._max_pool_dimension, in_dims=-1, out_dims=-1)(weight, feature=feature)
+    #     return tensor.permute(0,2,1)
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        
+        # Normalize the socre value
+        score, total_length = self.score_norm(score, total_length)
+
+        # Monotonic Expansion
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # Get the masked weight
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+
+        # Make the sum or each row to one
+        weight_sum = torch.sum(weight, dim=1, keepdim=True)
+        one_minus_weight_sum = 1-weight_sum
+        one_minus_weight_sum_cumsum = torch.cumsum(one_minus_weight_sum, dim=2)
+        need_minus, need_add = self.locate_first_and_last_position(mask)
+        need_minus = need_minus[:,:,1:] * one_minus_weight_sum_cumsum[:,:,:-1]
+        need_minus = torch.nn.functional.pad(need_minus,(1,0))
+        need_add = need_add * one_minus_weight_sum_cumsum
+        weight = weight - need_minus + need_add
+
+        # [3, 105, 128]    
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        # tensor_list_maxpool=tensor_list
+        # tensor_list_maxpool = self.calculate_max_pool(weight, feature)
+        tensor_list_maxpool = self.calculate_max_pool_fast_grouped(weight/self.preserv_ratio, feature)
+        # tensor_list_maxpool = self.calculate_max_pool_fast(weight, feature)
+        # tensor_list_maxpool = self.calculate_max_pool_fast_efficient(weight, feature)
+        tensor_list = (tensor_list + tensor_list_maxpool) / 2
+        
+        pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        ret['emb'] = pos_emb
+        ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=tensor_list_maxpool
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret 
+
+# 0.64
+class NewAlgoDilatedConv1dMaxPool(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+        super(NewAlgoDilatedConv1dMaxPool, self).__init__()
+        self.input_dim=128
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.feature_channels=2
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
+        self.use_pos_emb = True
+
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=2, input_size=self.input_seq_length, kernel_size=3, stride=1)
+        
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding")
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
+
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def score_norm(self, score, total_length):
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < RESCALE_INTERVEL_MAX, score > RESCALE_INTERVEL_MIN) # TODO here 0.1 or RESCALE_INTERVEL_MIN
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        return score, total_length
+
+    def locate_first_and_last_position(self, mask):
+        """Locate the first non-negative in a row, and the element before the last non-negative element in a row
+
+        Args:
+            mask (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        bs, orig_len, target_len = mask.size()
+        
+        assert orig_len >= target_len
+
+        weight = torch.tensor([-1.0,1.0]).expand(target_len,-1).to(mask.device)
+        weight = weight.unsqueeze(1)
+        value = torch.nn.functional.conv1d(mask.permute(0,2,1).float(), weight, bias=None, stride=1, padding=0, dilation=1, groups=target_len)
+        value = torch.nn.functional.pad(value, (1,0))
+        value = value.permute(0,2,1)
+        return value == 1, value == -1
+    
+    # def calculate_max_pool(self, weight, feature):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     tensor_list = []
+    #     for i in range(weight.size(-1)):
+    #         weight_row = weight[:,:,i].unsqueeze(-1)
+    #         tensor = (feature * weight_row).permute(0,2,1)
+    #         tensor_list.append(torch.nn.functional.max_pool1d(tensor, kernel_size=self.input_seq_length).permute(0,2,1))
+    #     return torch.cat(tensor_list, dim=1)
+
+    def calculate_max_pool_fast(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, seqlen, compressed_len = weight.size()
+        bs, seqlen, mel_bins = feature.size()
+        expanded_feature = feature.unsqueeze(2).expand(bs, seqlen, compressed_len, mel_bins)
+        expanded_feature = (expanded_feature * weight.unsqueeze(-1)).permute(0,2,1,3)
+        tensor = torch.nn.functional.max_pool2d(expanded_feature, kernel_size=(self.input_seq_length, 1)).squeeze(2)
+        return tensor
+    
+    # def calculate_max_pool_slow(self, weight, feature):
+    #     bs, seqlen, compressed_len = weight.size()
+    #     bs, seqlen, mel_bins = feature.size()
+    #     weight = weight[0]
+    #     feature = feature[0]
+    #     assert bs == 1
+    #     tensor_list = []
+    #     for i in range(compressed_len):
+    #         non_zero_feature = feature[weight[:,i] > 0]
+    #         pooled_feature = torch.nn.functional.max_pool1d(non_zero_feature.permute(1,0), kernel_size=(non_zero_feature.size(0))).permute(1,0).unsqueeze(0)
+    #         tensor_list.append(pooled_feature)
+    #     return torch.cat(tensor_list, dim=1)
+    
+    def calculate_max_pool_fast_grouped(self, weight, feature):
+        # weight: [3, 1056, 105]
+        # feature: [3, 1056, 128]
+        bs, _, _ = weight.size()
+        start_idx = 0
+        tensor_list = []
+        while(start_idx < bs):
+            weight_batch, feature_batch = weight[start_idx:start_idx+1], feature[start_idx:start_idx+1]
+            if(weight_batch.size(0) == 0): break
+            tensor_list.append(self.calculate_max_pool_fast(weight_batch, feature_batch))
+            start_idx += 1
+        return torch.cat(tensor_list, dim=0)
+
+    # def _max_pool_dimension(self, weight, feature=None):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     weight_row = weight.unsqueeze(-1)
+    #     tensor = (feature * weight_row).permute(0,2,1)
+    #     return torch.max(tensor, dim=-1)[0]
+
+    # def calculate_max_pool_fast_efficient(self, weight, feature):
+    #     # weight: [3, 1056, 105]
+    #     # feature: [3, 1056, 128]
+    #     tensor = vmap(self._max_pool_dimension, in_dims=-1, out_dims=-1)(weight, feature=feature)
+    #     return tensor.permute(0,2,1)
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        
+        # Normalize the socre value
+        score, total_length = self.score_norm(score, total_length)
+
+        # Monotonic Expansion
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # Get the masked weight
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+
+        # Make the sum or each row to one
+        weight_sum = torch.sum(weight, dim=1, keepdim=True)
+        one_minus_weight_sum = 1-weight_sum
+        one_minus_weight_sum_cumsum = torch.cumsum(one_minus_weight_sum, dim=2)
+        need_minus, need_add = self.locate_first_and_last_position(mask)
+        need_minus = need_minus[:,:,1:] * one_minus_weight_sum_cumsum[:,:,:-1]
+        need_minus = torch.nn.functional.pad(need_minus,(1,0))
+        need_add = need_add * one_minus_weight_sum_cumsum
+        weight = weight - need_minus + need_add
+
+        # [3, 105, 128]    
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        # tensor_list_maxpool=tensor_list
+        # tensor_list_maxpool = self.calculate_max_pool(weight, feature)
+        tensor_list_maxpool = self.calculate_max_pool_fast_grouped(weight, feature)
+        # tensor_list_maxpool = self.calculate_max_pool_fast(weight, feature)
+        # tensor_list_maxpool = self.calculate_max_pool_fast_efficient(weight, feature)
+        tensor_list = (tensor_list + tensor_list_maxpool) / 2
+        
+        pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        ret['emb'] = pos_emb
+        ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=tensor_list_maxpool
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret 
+    
 # Use DNN
 class BaselineConstantScore(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
@@ -954,7 +2093,6 @@ class BaselineConstantScore(nn.Module):
         ret['score']=score
         return ret
 
-  
 # Use DNN
 class NeuralSamplerDilatedConv1d(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
@@ -1078,7 +2216,6 @@ class NeuralSamplerDilatedConv1d(nn.Module):
         alpha = torch.sum(weight, dim=1, keepdim=True)
         return weight/(alpha+1e-8)
 
-# Use DNN
 class NewAlgoDilatedConv1d(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
         super(NewAlgoDilatedConv1d, self).__init__()
@@ -1223,7 +2360,7 @@ class NewAlgoDilatedConv1d(nn.Module):
         ret['score_loss'] = torch.mean(torch.std(score, dim=1))
         ret['score']=score
         return ret 
-    
+
 # Use DNN
 class NewAlgoDilatedConv1dPlusPos(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
@@ -1363,6 +2500,153 @@ class NewAlgoDilatedConv1dPlusPos(nn.Module):
 
         tensor_list = torch.matmul(weight.permute(0,2,1), feature)
         pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+
+        ret['emb'] = pos_emb
+        ret['feature'] = tensor_list.unsqueeze(1) + pos_emb.unsqueeze(1)
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret 
+
+class NewAlgoDilatedConv1dPlusPosScalePos(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+        super(NewAlgoDilatedConv1dPlusPosScalePos, self).__init__()
+        self.input_dim=128
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.feature_channels=1
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
+        self.use_pos_emb = True
+
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=2, input_size=self.input_seq_length, kernel_size=3, stride=1)
+        
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding with scale and bias")
+            self.scale = nn.Parameter(torch.tensor([1.0]), requires_grad=True)
+            self.bias = nn.Parameter(torch.tensor([0.0]), requires_grad=True)
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=learn_pos_emb)
+
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(511)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(512)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(513)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(514)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(515)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def score_norm(self, score, total_length):
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < RESCALE_INTERVEL_MAX, score > RESCALE_INTERVEL_MIN) # TODO here 0.1 or RESCALE_INTERVEL_MIN
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        return score, total_length
+
+    def locate_first_and_last_position(self, mask):
+        """Locate the first non-negative in a row, and the element before the last non-negative element in a row
+
+        Args:
+            mask (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        bs, orig_len, target_len = mask.size()
+        
+        assert orig_len >= target_len
+
+        weight = torch.tensor([-1.0,1.0]).expand(target_len,-1).to(mask.device)
+        weight = weight.unsqueeze(1)
+        value = torch.nn.functional.conv1d(mask.permute(0,2,1).float(), weight, bias=None, stride=1, padding=0, dilation=1, groups=target_len)
+        value = torch.nn.functional.pad(value, (1,0))
+        value = value.permute(0,2,1)
+        return value == 1, value == -1
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        
+        # Normalize the socre value
+        score, total_length = self.score_norm(score, total_length)
+
+        # Monotonic Expansion
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # Get the masked weight
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+
+        # Make the sum or each row to one
+        weight_sum = torch.sum(weight, dim=1, keepdim=True)
+        one_minus_weight_sum = 1-weight_sum
+        one_minus_weight_sum_cumsum = torch.cumsum(one_minus_weight_sum, dim=2)
+        need_minus, need_add = self.locate_first_and_last_position(mask)
+        need_minus = need_minus[:,:,1:] * one_minus_weight_sum_cumsum[:,:,:-1]
+        need_minus = torch.nn.functional.pad(need_minus,(1,0))
+        need_add = need_add * one_minus_weight_sum_cumsum
+        weight = weight - need_minus + need_add
+
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        pos_emb = torch.matmul(weight.permute(0,2,1), (self.pos_emb * self.scale) + self.bias)
 
         ret['emb'] = pos_emb
         ret['feature'] = tensor_list.unsqueeze(1) + pos_emb.unsqueeze(1)
@@ -2867,7 +4151,6 @@ class NeuralSamplerDNNFreezePosInit(nn.Module):
         tensor_list = torch.matmul(weight.permute(0,2,1), feature)
         pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
 
-
         ret['emb'] = pos_emb
         ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
         ret['score_loss'] = torch.mean(torch.std(score, dim=1))
@@ -3402,11 +4685,12 @@ if __name__ == "__main__":
     # test_feature_single()
     # test_select_feature()
     # test_sampler(FrameLSTM)
-    test_sampler(MappingDNN)
-    # test_sampler(NeuralSamplerEnergyNNFreezePos)
-    # test_sampler(NeuralSamplerDNNFreezePos)
-    # test_sampler(NeuralSamplerUniformPool)
-    # test_sampler(NeuralSamplerSpecPool)
+    test_sampler(BaselineAdaAvgMaxPool)
+    test_sampler(BaselineConstantScoreMaxPoolCeil)
+    test_sampler(NewAlgoDilatedConv1dMaxPool)
+    test_sampler(NewAlgoDilatedConv1dMaxPoolv2Ch)
+    test_sampler(NewAlgoDilatedConv1dMaxPoolv2)
+    test_sampler(NewAlgoDilatedConv1dMaxPoolv3Ceil)
 
 
     # test_sampler(NeuralSamplerNoFakeSoftmax)                                                # Better than NeuralSampler
