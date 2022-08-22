@@ -20,7 +20,7 @@ psla=True
 eff_b=2
 dataset=fsd50k
 
-if [ $psla == True ]
+if [ "$psla" = "True" ]
 then
   impretrain=True
   freqm=48
@@ -36,10 +36,9 @@ else
 fi
 
 lr=5e-4
-
 trpath=./datafiles/fsd50k_tr_full.json
 
-for preserve_ratio in 0.1
+for preserve_ratio in 1.0
 do
 alpha=1.0
 beta=1.0
@@ -50,7 +49,9 @@ lrscheduler_start=10
 hop_ms=10
 batch_size=8
 graph_weight_path=undirected_graph_connectivity_no_root.npy
-note=fsd50k
+
+note=bsl_fsd50k
+
 learn_pos_emb=False
 target_length=3000
 reweight_loss=False

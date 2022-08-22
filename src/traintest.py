@@ -126,7 +126,6 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
         logging_info(rank, "current #epochs=%s, #steps=%s" % (epoch, global_step))
         # print(os.getpid(), "ready to engage")
         for i, (audio_input, labels, fnames) in enumerate(train_loader):
-            # print(rank, fnames)
             B = audio_input.size(0)
             audio_input = audio_input.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
@@ -254,9 +253,17 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                 mAP = np.mean([stat['AP'] for stat in stats])
                 mAUC = np.mean([stat['auc'] for stat in stats])
                 acc = stats[0]['acc']
-                logging_info(rank, "mAP %s, mAUC %s, acc %s" % (mAP, mAUC, acc))
-                print("mAP %s, mAUC %s, acc %s" % (mAP, mAUC, acc))
-                val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc}
+                
+                fps_ap = np.mean([stat['mean_fps_ap'] for stat in stats])
+                tps_ap = np.mean([stat['mean_tps_ap'] for stat in stats])
+                tps_fps_ap = np.mean([stat['mean_tps_fps_ap'] for stat in stats])
+                
+                logging_info(rank, "mAP %s, mAUC %s, acc %s, mean_fps_ap %s, mean_tps_ap %s, mean_tps_fps_ap %s" % (mAP, mAUC, acc, fps_ap, tps_ap, tps_fps_ap))
+                
+                val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc, "mean_fps_ap": fps_ap, "mean_tps_ap": tps_ap, "mean_tps_fps_ap": tps_fps_ap}
+                
+                for k in val_info.keys():
+                    print(k, val_info[k])
                 
                 wandb.log(val_info, step=global_step)
                 

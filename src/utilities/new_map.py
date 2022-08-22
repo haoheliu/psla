@@ -244,11 +244,12 @@ def build_label_to_class(label_csv):
         label2class[int(row["index"])] = row["display_name"]
     return label2class
 
-def initialize_weight(graph_weight_path):
+def initialize_weight(graph_weight_path, beta=1.0):
     print("Normalize graph connectivity weight by the max value.")
     weight = np.load(
         graph_weight_path
     )
+    weight = weight ** beta
     weight /= np.max(weight)
     return weight
 
@@ -275,9 +276,9 @@ def build_ontology_tps_sample_weight(target, weight, class_idx):
     # Otherwise, the ret value of i-th element will be the confidence that class_idx can be counted as positive
     return ret
 
-def build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, refresh=False):
+def build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, refresh=False, beta=1.0):
     fps_tps_lookup = {}
-    save_path = graph_weight_path+"_%s_fps_tps_lookup.pkl" % str(preserve_ratio)
+    save_path = graph_weight_path+"_%s_%s_fps_tps_lookup.pkl" % (str(preserve_ratio), beta)
 
     if(refresh or not os.path.exists(save_path)):
         for i in tqdm(range(target.shape[1])):
@@ -291,12 +292,10 @@ def build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, refr
         fps_tps_lookup = load_pickle(save_path)
     return fps_tps_lookup
 
-def mean_average_precision(target, clipwise_output, graph_weight_path, preserve_ratio, new_metric=True, n_class=527):
+def mean_average_precision(target, clipwise_output, graph_weight_path, preserve_ratio, new_metric=True, beta=1.0):
     # tps_fps_weight = self.build_tps_fps_weight(target)
-    weight = initialize_weight(graph_weight_path)
-    assert weight.shape[0] == weight.shape[1] == n_class
-    
-    tps_fps_weight = build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio)
+    weight = initialize_weight(graph_weight_path, beta=beta)
+    tps_fps_weight = build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, beta)
 
     ap = []
     fps_ap=[]
