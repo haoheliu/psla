@@ -291,9 +291,11 @@ def build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, refr
         fps_tps_lookup = load_pickle(save_path)
     return fps_tps_lookup
 
-def mean_average_precision(target, clipwise_output, graph_weight_path, preserve_ratio, new_metric=True):
+def mean_average_precision(target, clipwise_output, graph_weight_path, preserve_ratio, new_metric=True, n_class=527):
     # tps_fps_weight = self.build_tps_fps_weight(target)
     weight = initialize_weight(graph_weight_path)
+    assert weight.shape[0] == weight.shape[1] == n_class
+    
     tps_fps_weight = build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio)
 
     ap = []

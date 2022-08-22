@@ -145,6 +145,7 @@ def main():
     # args.batch_size=args.batch_size*n_gpus
     args = adaptive_batchsize(args)
     args = update_target_length_preserve_ratio(args)
+    print("Class numbers", args.n_class)
     if  n_gpus > 1:
         mp.spawn(run, nprocs=n_gpus, args=(n_gpus, args,),join=True)
     else:

@@ -13,6 +13,7 @@ fig/*
 .DS_Store
 !/egs/audioset/class_labels_indices.csv
 !/egs/fsd50k/class_labels_indices.csv
+egs/fsd50k/exp
 *.pptx
 *.mp4
 *.npy
@@ -31,3 +32,5 @@ docker_stderror
 rsync.submitfile
 submit.submitfile
 submit.log
+wandb
+.nfs*
