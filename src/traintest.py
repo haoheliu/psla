@@ -392,14 +392,13 @@ def validate(rank, n_gpus, audio_model, val_loader, args, epoch, eval_target=Fal
         target = torch.cat(A_targets)   
         loss = np.mean(A_loss)  
 
-        if(batchsize == 1):
-            print("save the model prediction pickle file")
-            output_dict = {}
-            output_dict["audio_name"] = fname[:,0]
-            output_dict["clipwise_output"] = audio_output.cpu().numpy()
-            output_dict["target"] = target.cpu().numpy()
-            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
-            save_pickle(output_dict, os.path.join(path, "%s_%s.pkl" % (args.sampler, epoch)))
+        print("save the model prediction pickle file")
+        output_dict = {}
+        output_dict["audio_name"] = fname[:,0]
+        output_dict["clipwise_output"] = audio_output.cpu().numpy()
+        output_dict["target"] = target.cpu().numpy()
+        path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+        save_pickle(output_dict, os.path.join(path, "%s_%s.pkl" % (args.sampler, epoch)))
 
         stats = calculate_stats(audio_output, target, args)   
         # save the prediction here  

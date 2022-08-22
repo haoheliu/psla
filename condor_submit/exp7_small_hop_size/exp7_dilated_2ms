@@ -31,7 +31,7 @@ requirements = (machine!="nain.eps.surrey.ac.uk") && (CUDADeviceName == "GeForce
 # Resources
 request_GPUs     = 2
 request_CPUs     = 1
-request_memory = 64G
+request_memory = 96G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
