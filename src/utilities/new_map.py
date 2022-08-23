@@ -295,7 +295,7 @@ def build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, refr
 def mean_average_precision(target, clipwise_output, graph_weight_path, preserve_ratio, new_metric=True, beta=1.0):
     # tps_fps_weight = self.build_tps_fps_weight(target)
     weight = initialize_weight(graph_weight_path, beta=beta)
-    tps_fps_weight = build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, beta)
+    tps_fps_weight = build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, beta=beta)
 
     ap = []
     fps_ap=[]

@@ -291,9 +291,9 @@ def run(rank, n_gpus, args):
             sd = torch.load(args.exp_dir + '/models/best_audio_model.pth', map_location=device)
             # if not isinstance(audio_model, nn.DataParallel):
             #     audio_model = nn.DataParallel(audio_model)
-            audio_model.load_state_dict(sd)
+            audio_model.load_state_dict(sd["state_dict"])
             logging.info('---------------evaluate best single model on the validation set---------------')
-            stats, _ = validate(audio_model, val_loader, args, 'best_single_valid_set')
+            stats, _ = validate(rank, n_gpus, audio_model, val_loader, args, 'best_single_valid_set')
             val_mAP = np.mean([stat['AP'] for stat in stats])
             val_mAUC = np.mean([stat['auc'] for stat in stats])
             logging.info("mAP: {:.6f}".format(val_mAP))
@@ -301,7 +301,7 @@ def run(rank, n_gpus, args):
             info["mAP/val_single"]=val_mAP
             info["AUC/val_single"]=val_mAUC
             logging.info('---------------evaluate best single model on the evaluation set---------------')
-            stats, _ = validate(audio_model, eval_loader, args, 'best_single_eval_set', eval_target=True)
+            stats, _ = validate(rank, n_gpus, audio_model, eval_loader, args, 'best_single_eval_set', eval_target=True)
             eval_mAP = np.mean([stat['AP'] for stat in stats])
             eval_mAUC = np.mean([stat['auc'] for stat in stats])
             logging.info("mAP: {:.6f}".format(eval_mAP))
@@ -312,9 +312,9 @@ def run(rank, n_gpus, args):
 
             # evaluate weight average model
             sd = torch.load(args.exp_dir + '/models/audio_model_wa.pth', map_location=device)
-            audio_model.load_state_dict(sd)
+            audio_model.load_state_dict(sd["state_dict"])
             logging.info('---------------evaluate weight average model on the validation set---------------')
-            stats, _ = validate(audio_model, val_loader, args, 'wa_valid_set')
+            stats, _ = validate(rank, n_gpus, audio_model, val_loader, args, 'wa_valid_set')
             val_mAP = np.mean([stat['AP'] for stat in stats])
             val_mAUC = np.mean([stat['auc'] for stat in stats])
             logging.info("mAP: {:.6f}".format(val_mAP))
@@ -322,7 +322,7 @@ def run(rank, n_gpus, args):
             info["mAP/val_wa"]=val_mAP
             info["AUC/val_wa"]=val_mAUC
             logging.info('---------------evaluate weight averages model on the evaluation set---------------')
-            stats, _ = validate(audio_model, eval_loader, args, 'wa_eval_set')
+            stats, _ = validate(rank, n_gpus, audio_model, eval_loader, args, 'wa_eval_set')
             eval_mAP = np.mean([stat['AP'] for stat in stats])
             eval_mAUC = np.mean([stat['auc'] for stat in stats])
             logging.info("mAP: {:.6f}".format(eval_mAP))
@@ -345,7 +345,7 @@ def run(rank, n_gpus, args):
             # get the prediction of each checkpoint model
             for epoch in range(1, args.n_epochs+1):
                 sd = torch.load(args.exp_dir + '/models/audio_model.' + str(epoch) + '.pth', map_location=device)
-                audio_model.load_state_dict(sd)
+                audio_model.load_state_dict(sd["state_dict"])
                 validate(audio_model, eval_loader, args, 'eval_'+str(epoch))
             # average the checkpoint prediction and calculate the results
             target = np.loadtxt(args.exp_dir + '/predictions/eval_target.csv', delimiter=',')
