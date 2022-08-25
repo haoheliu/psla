@@ -29,11 +29,11 @@ requirements = (machine!="nain.eps.surrey.ac.uk") && (CUDADeviceName == "GeForce
 
 # --------------------------------------
 # Resources
-request_GPUs     = 4
+request_GPUs     = 1
 request_CPUs     = 1
-request_memory = 96G
+request_memory = 64G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
-queue 1 type in DoNothing
+queue 1 type in NewAlgoDilatedConv1dIntp
 # -----------------------------------

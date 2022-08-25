@@ -1,17 +1,26 @@
+import sys
+sys.path.append("/media/Disk_HDD/haoheliu/projects/psla/src")
+sys.path.append("/Volumes/nobackup-scratch4weeks/hl01486/project/psla/src")
+sys.path.append("/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/src")
 from turtle import forward
 from unicodedata import bidirectional
 import torch.nn as nn
 import torch
 
-if __name__ == '__main__':
-    from HigherModels import *
-    from neural_sampler import *
-else:
-    from .HigherModels import *
-    from .neural_sampler import *
+from models.HigherModels import *
+from models.neural_sampler import *
+
+# if __name__ == '__main__':
+#     from HigherModels import *
+#     from neural_sampler import *
+# else:
+#     from .HigherModels import *
+#     from .neural_sampler import *
 
 from efficientnet_pytorch import EfficientNet
 import torchvision
+from models.leaf_pytorch.frontend import Leaf
+import numpy as np
 
 class ResNetAttention(nn.Module):
     def __init__(self, label_dim=527, pretrain=True):
@@ -69,7 +78,7 @@ class MBNet(nn.Module):
         return out
 
 class EffNetAttention(nn.Module):
-    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False, use_leaf=False):
         super(EffNetAttention, self).__init__()
         self.middim = [1280, 1280, 1408, 1536, 1792, 2048, 2304, 2560]
         self.input_seq_length = input_seq_length
@@ -139,15 +148,15 @@ def test_model():
     from thop import profile
 
     # model = MBNet(pretrain=False)
-    model = EffNetAttention(pretrain=False, b=0, head_num=0, sampler=NeuralSamplerLargeEnergy, preserve_ratio=0.25) # 2.688G 717.103K
+    model = EffNetAttention(pretrain=False, b=0, head_num=0, sampler=DoNothing, preserve_ratio=0.25, use_leaf=True) # 2.688G 717.103K
     
     test_input = torch.rand([10, input_tdim, 128])
-    flops, params = profile(model, inputs=(test_input, ))
+    test_waveform = torch.rand([10, 1, 160000])
+    flops, params = profile(model, inputs=(test_input, test_waveform))
     flops, params = clever_format([flops, params], "%.3f")
 
     print(flops, params)
     # output should be in shape [10, 527], i.e., 10 samples, each with prediction of 527 classes.
-    import ipdb; ipdb.set_trace()
 
 if __name__ == '__main__':
     test_model()

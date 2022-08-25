@@ -128,8 +128,8 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
         for i, (audio_input, labels, fnames) in enumerate(train_loader):
             B = audio_input.size(0)
             audio_input = audio_input.to(device, non_blocking=True)
+            # waveform = waveform.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
-
             # If you want to measure the mean and std of the dataset
             # global DATA
             # if(DATA is None):
@@ -374,11 +374,13 @@ def validate(rank, n_gpus, audio_model, val_loader, args, epoch, eval_target=Fal
     A_loss = [] 
     A_fname = []
     with torch.no_grad():   
-        for i, (audio_input, labels ,fname) in tqdm(enumerate(val_loader)):  
+        for i, (audio_input, labels, fname) in tqdm(enumerate(val_loader)):  
             batchsize = audio_input.size(0)
+            # waveform = waveform.to(device)
             audio_input = audio_input.to(device)  
             # compute output    
             audio_output,_,_ = audio_model(audio_input) 
+            
             predictions = audio_output.to('cpu').detach()   
             A_predictions.append(predictions)   
             A_targets.append(labels)    
@@ -465,7 +467,7 @@ def validate_wa(rank, n_gpus, audio_model, val_loader, args, start_epoch, end_ep
 
     audio_model.load_state_dict(sdA)
 
-    torch.save(audio_model.state_dict(), exp_dir + '/models/audio_model_wa.pth')
+    torch.save({"state_dict": audio_model.state_dict(), "epoch": -1, "global_step": -1}, exp_dir + '/models/audio_model_wa.pth')
 
     stats, loss = validate(rank, n_gpus, audio_model, val_loader, args, 'wa')
     return stats

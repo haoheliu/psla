@@ -10,6 +10,8 @@ import time
 from turtle import update
 import torch
 import shutil
+
+from utilities.new_map import load_pickle
 basepath = os.path.dirname(os.path.dirname(sys.path[0]))
 sys.path.append(basepath)
 import dataloaders
@@ -66,85 +68,95 @@ def adaptive_batchsize(args):
 def update_target_length_preserve_ratio(args):
     args.preserve_ratio = args.preserve_ratio * (args.hop_ms / 10) # The 10ms one is the baseline
     args.target_length = int(args.target_length * (10 / args.hop_ms))
+    args.output_seq_len = int(args.target_length * args.preserve_ratio)
     msg = "Hop length %s ms; Target length %s; Preserve ratio: %s; " % (args.hop_ms, args.target_length, args.preserve_ratio)
     print(msg)
     return args
     
-def main():
+def main(argpath=None):
     print(os.getcwd())
-    # I/O args
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--data-train", type=str, default='', help="training data json")
-    parser.add_argument("--data-val", type=str, default='', help="validation data json")
-    parser.add_argument("--data-eval", type=str, default=None, help="evaluation data json")
-    parser.add_argument("--label-csv", type=str, default=os.path.join(basepath, 'utilities/class_labels_indices_coarse.csv'), help="csv with class labels")
-    parser.add_argument("--exp-dir", type=str, default="", help="directory to dump experiments")
+    if(argpath is None):
+        # I/O args
+        parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        parser.add_argument("--data-train", type=str, default='', help="training data json")
+        parser.add_argument("--data-val", type=str, default='', help="validation data json")
+        parser.add_argument("--data-eval", type=str, default=None, help="evaluation data json")
+        parser.add_argument("--label-csv", type=str, default=os.path.join(basepath, 'utilities/class_labels_indices_coarse.csv'), help="csv with class labels")
+        parser.add_argument("--exp-dir", type=str, default="", help="directory to dump experiments")
 
-    # training and optimization args
-    parser.add_argument("--optim", type=str, default="adam", help="training optimizer", choices=["sgd", "adam"])
-    parser.add_argument('-b', '--batch-size', default=60, type=int, metavar='N', help='mini-batch size (default: 100)')
-    parser.add_argument('-w', '--num-workers', default=8, type=int, metavar='NW', help='# of workers for dataloading (default: 8)')
-    parser.add_argument('--lr', '--learning-rate', default=0.001, type=float, metavar='LR', help='initial learning rate')
-    parser.add_argument('--lr-decay', default=40, type=int, metavar='LRDECAY', help='Divide the learning rate by 10 every lr_decay epochs')
-    parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
-    parser.add_argument('--weight-decay', '--wd', default=5e-7, type=float, metavar='W', help='weight decay (default: 1e-4)')
-    parser.add_argument("--n-epochs", type=int, default=1, help="number of maximum training epochs")
-    parser.add_argument("--n-print-steps", type=int, default=1, help="number of steps to print statistics")
+        # training and optimization args
+        parser.add_argument("--optim", type=str, default="adam", help="training optimizer", choices=["sgd", "adam"])
+        parser.add_argument('-b', '--batch-size', default=60, type=int, metavar='N', help='mini-batch size (default: 100)')
+        parser.add_argument('-w', '--num-workers', default=8, type=int, metavar='NW', help='# of workers for dataloading (default: 8)')
+        parser.add_argument('--lr', '--learning-rate', default=0.001, type=float, metavar='LR', help='initial learning rate')
+        parser.add_argument('--lr-decay', default=40, type=int, metavar='LRDECAY', help='Divide the learning rate by 10 every lr_decay epochs')
+        parser.add_argument('--momentum', default=0.9, type=float, metavar='M', help='momentum')
+        parser.add_argument('--weight-decay', '--wd', default=5e-7, type=float, metavar='W', help='weight decay (default: 1e-4)')
+        parser.add_argument("--n-epochs", type=int, default=1, help="number of maximum training epochs")
+        parser.add_argument("--n-print-steps", type=int, default=1, help="number of steps to print statistics")
 
-    # model args
-    parser.add_argument("--model", type=str, default="efficientnet", help="audio model architecture", choices=["efficientnet", "resnet", "mbnet"])
-    parser.add_argument("--dataset", type=str, default="audioset", help="the dataset used", choices=["audioset", "esc50", "speechcommands","fsd50k","audiosetbalanced"])
-    parser.add_argument("--graph_weight_path", type=str, default="")
+        # model args
+        parser.add_argument("--model", type=str, default="efficientnet", help="audio model architecture", choices=["efficientnet", "resnet", "mbnet"])
+        parser.add_argument("--dataset", type=str, default="audioset", help="the dataset used", choices=["audioset", "esc50", "speechcommands","fsd50k","audiosetbalanced"])
+        parser.add_argument("--graph_weight_path", type=str, default="")
 
-    parser.add_argument("--dataset_mean", type=float, default=-4.6476, help="the dataset mean, used for input normalization")
-    parser.add_argument("--dataset_std", type=float, default=4.5699, help="the dataset std, used for input normalization")
-    parser.add_argument("--target_length", type=int, default=1056, help="the input length in frames")
-    parser.add_argument("--noise", help='if use balance sampling', type=ast.literal_eval)
-    parser.add_argument("--metrics", type=str, default="mAP", help="the main evaluation metrics", choices=["mAP", "acc"])
-    parser.add_argument("--warmup", help='if use balance sampling', type=ast.literal_eval)
-    parser.add_argument("--loss", type=str, default="BCE", help="the loss function", choices=["BCE", "CE"])
-    parser.add_argument("--lrscheduler_start", type=int, default=10, help="when to start decay")
-    parser.add_argument("--lrscheduler_decay", type=float, default=0.5, help="the learning rate decay ratio")
-    parser.add_argument("--wa", help='if do weight averaging', type=ast.literal_eval)
-    parser.add_argument("--wa_start", type=int, default=16, help="which epoch to start weight averaging")
-    parser.add_argument("--wa_end", type=int, default=30, help="which epoch to end weight averaging")
+        parser.add_argument("--dataset_mean", type=float, default=-4.6476, help="the dataset mean, used for input normalization")
+        parser.add_argument("--dataset_std", type=float, default=4.5699, help="the dataset std, used for input normalization")
+        parser.add_argument("--target_length", type=int, default=1056, help="the input length in frames")
+        parser.add_argument("--noise", help='if use balance sampling', type=ast.literal_eval)
+        parser.add_argument("--metrics", type=str, default="mAP", help="the main evaluation metrics", choices=["mAP", "acc"])
+        parser.add_argument("--warmup", help='if use balance sampling', type=ast.literal_eval)
+        parser.add_argument("--loss", type=str, default="BCE", help="the loss function", choices=["BCE", "CE"])
+        parser.add_argument("--lrscheduler_start", type=int, default=10, help="when to start decay")
+        parser.add_argument("--lrscheduler_decay", type=float, default=0.5, help="the learning rate decay ratio")
+        parser.add_argument("--wa", help='if do weight averaging', type=ast.literal_eval)
+        parser.add_argument("--wa_start", type=int, default=16, help="which epoch to start weight averaging")
+        parser.add_argument("--wa_end", type=int, default=30, help="which epoch to end weight averaging")
 
-    parser.add_argument("--n_class", type=int, default=527, help="number of classes")
-    parser.add_argument('--save_model', help='save the model or not', type=ast.literal_eval)
-    parser.add_argument("--eff_b", type=int, default=0, help="which efficientnet to use, the larger number, the more complex")
-    parser.add_argument('--esc', help='If doing an ESC exp, which will have some different behabvior', type=ast.literal_eval, default='False')
-    parser.add_argument('--impretrain', help='if use imagenet pretrained CNNs', type=ast.literal_eval, default='True')
-    parser.add_argument('--freqm', help='frequency mask max length', type=int, default=0)
-    parser.add_argument('--timem', help='time mask max length', type=int, default=0)
-    parser.add_argument("--mixup", type=float, default=0, help="how many (0-1) samples need to be mixup during training")
-    parser.add_argument("--lr_patience", type=int, default=2, help="how many epoch to wait to reduce lr if mAP doesn't improve")
-    parser.add_argument("--att_head", type=int, default=4, help="number of attention heads")
-    parser.add_argument('--bal', help='if use balance sampling', type=ast.literal_eval)
+        parser.add_argument("--n_class", type=int, default=527, help="number of classes")
+        parser.add_argument('--save_model', help='save the model or not', type=ast.literal_eval)
+        parser.add_argument("--eff_b", type=int, default=0, help="which efficientnet to use, the larger number, the more complex")
+        parser.add_argument('--esc', help='If doing an ESC exp, which will have some different behabvior', type=ast.literal_eval, default='False')
+        parser.add_argument('--impretrain', help='if use imagenet pretrained CNNs', type=ast.literal_eval, default='True')
+        parser.add_argument('--freqm', help='frequency mask max length', type=int, default=0)
+        parser.add_argument('--timem', help='time mask max length', type=int, default=0)
+        parser.add_argument("--mixup", type=float, default=0, help="how many (0-1) samples need to be mixup during training")
+        parser.add_argument("--lr_patience", type=int, default=2, help="how many epoch to wait to reduce lr if mAP doesn't improve")
+        parser.add_argument("--att_head", type=int, default=4, help="number of attention heads")
+        parser.add_argument('--bal', help='if use balance sampling', type=ast.literal_eval)
 
-    parser.add_argument("--sampler", type=str, default="NeuralSampler")
-    parser.add_argument("--weight_func", type=str, default="")
-    parser.add_argument("--note", type=str, default="debug")
-    parser.add_argument("--preserve_ratio", type=float, default=0.1)
-    parser.add_argument("--alpha", type=float, default=1.0, help="The scaling factor to the importance score")
-    parser.add_argument("--beta", type=float, default=1.0, help="The scaling factor to the graph weight")
-    parser.add_argument("--val_interval", type=int, default=1)
-    parser.add_argument("--seed", type=int, default=1234)
-    parser.add_argument("--reweight_loss", type=ast.literal_eval, default=False)
-    
-    parser.add_argument("--apply_zero_loss_threshold", type=float, default=0.5)
-    parser.add_argument("--lambda_zero_loss", type=float, default=0.01)
-    parser.add_argument("--learn_pos_emb", type=ast.literal_eval, default=False)
-    parser.add_argument("--hop_ms", type=int, default=10, help="The hop size when calculating STFT (ms)")
-    args = parser.parse_args()
+        parser.add_argument("--sampler", type=str, default="NeuralSampler")
+        parser.add_argument("--weight_func", type=str, default="")
+        parser.add_argument("--note", type=str, default="debug")
+        parser.add_argument("--preserve_ratio", type=float, default=0.1)
+        parser.add_argument("--alpha", type=float, default=1.0, help="The scaling factor to the importance score")
+        parser.add_argument("--beta", type=float, default=1.0, help="The scaling factor to the graph weight")
+        parser.add_argument("--val_interval", type=int, default=1)
+        parser.add_argument("--seed", type=int, default=1234)
+        parser.add_argument("--reweight_loss", type=ast.literal_eval, default=False)
+        
+        parser.add_argument("--apply_zero_loss_threshold", type=float, default=0.5)
+        parser.add_argument("--lambda_zero_loss", type=float, default=0.01)
+        parser.add_argument("--learn_pos_emb", type=ast.literal_eval, default=False)
+        parser.add_argument("--hop_ms", type=int, default=10, help="The hop size when calculating STFT (ms)")
+        
+        parser.add_argument("--use_leaf", type=ast.literal_eval, default=False)
+        
+        args = parser.parse_args()
+        
+        args = adaptive_batchsize(args)
+        args = update_target_length_preserve_ratio(args)
+        
+    else:
+        args = load_pickle(argpath)
+        args.note="reload_do_not_delete"
+        args.loss_fn = nn.BCELoss(reduction="none")
     
     seed_everything(int(args.seed)) # TODO put it where?
     seed_torch(int(args.seed)) # TODO put it where?
     
     """Assume Single Node Multi GPUs Training Only"""
     n_gpus = torch.cuda.device_count()
-    # args.batch_size=args.batch_size*n_gpus
-    args = adaptive_batchsize(args)
-    args = update_target_length_preserve_ratio(args)
     print("Class numbers", args.n_class)
     if  n_gpus > 1:
         mp.spawn(run, nprocs=n_gpus, args=(n_gpus, args,),join=True)
@@ -156,7 +168,7 @@ def run(rank, n_gpus, args):
     if(rank == 0):
         wandb.init(
         project="iclr2023",
-        # mode="disabled", # TODO
+        mode="disabled", # TODO
         name=os.path.basename(args.exp_dir),
         notes=args.note,
         tags=[args.sampler],
@@ -238,15 +250,15 @@ def run(rank, n_gpus, args):
         # Drop last here is interesting
         val_loader = torch.utils.data.DataLoader(
             dataloaders.AudiosetDataset(args.data_val, label_csv=args.label_csv, audio_conf=val_audio_conf, hop_ms=args.hop_ms),
-            batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers // 2, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
+            batch_size=args.batch_size // 2, shuffle=False, num_workers=args.num_workers // 4, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
 
         if args.data_eval != None:
             eval_loader = torch.utils.data.DataLoader(
                 dataloaders.AudiosetDataset(args.data_eval, label_csv=args.label_csv, audio_conf=val_audio_conf, hop_ms=args.hop_ms),
-                batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers // 2, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
+                batch_size=args.batch_size // 2, shuffle=False, num_workers=args.num_workers // 4, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
 
     if args.model == 'efficientnet':
-        audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha, learn_pos_emb=args.learn_pos_emb)
+        audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha, learn_pos_emb=args.learn_pos_emb, use_leaf=args.use_leaf)
     elif args.model == 'resnet':
         audio_model = models.ResNetAttention(label_dim=args.n_class, pretrain=args.impretrain)
     elif args.model == 'mbnet':
@@ -291,8 +303,10 @@ def run(rank, n_gpus, args):
             sd = torch.load(args.exp_dir + '/models/best_audio_model.pth', map_location=device)
             # if not isinstance(audio_model, nn.DataParallel):
             #     audio_model = nn.DataParallel(audio_model)
-            audio_model.load_state_dict(sd["state_dict"])
+            sd = sd["state_dict"] if (isinstance(sd, dict) and "state_dict" in sd.keys()) else sd
+            audio_model.load_state_dict(sd)
             logging.info('---------------evaluate best single model on the validation set---------------')
+            print("---------------evaluate best single model on the validation set---------------")
             stats, _ = validate(rank, n_gpus, audio_model, val_loader, args, 'best_single_valid_set')
             val_mAP = np.mean([stat['AP'] for stat in stats])
             val_mAUC = np.mean([stat['auc'] for stat in stats])
@@ -301,6 +315,7 @@ def run(rank, n_gpus, args):
             info["mAP/val_single"]=val_mAP
             info["AUC/val_single"]=val_mAUC
             logging.info('---------------evaluate best single model on the evaluation set---------------')
+            print("---------------evaluate best single model on the evaluation set---------------")
             stats, _ = validate(rank, n_gpus, audio_model, eval_loader, args, 'best_single_eval_set', eval_target=True)
             eval_mAP = np.mean([stat['AP'] for stat in stats])
             eval_mAUC = np.mean([stat['auc'] for stat in stats])
@@ -312,8 +327,10 @@ def run(rank, n_gpus, args):
 
             # evaluate weight average model
             sd = torch.load(args.exp_dir + '/models/audio_model_wa.pth', map_location=device)
-            audio_model.load_state_dict(sd["state_dict"])
+            sd = sd["state_dict"] if (isinstance(sd, dict) and "state_dict" in sd.keys()) else sd
+            audio_model.load_state_dict(sd)
             logging.info('---------------evaluate weight average model on the validation set---------------')
+            print("---------------evaluate weight average model on the validation set---------------")
             stats, _ = validate(rank, n_gpus, audio_model, val_loader, args, 'wa_valid_set')
             val_mAP = np.mean([stat['AP'] for stat in stats])
             val_mAUC = np.mean([stat['auc'] for stat in stats])
@@ -322,6 +339,7 @@ def run(rank, n_gpus, args):
             info["mAP/val_wa"]=val_mAP
             info["AUC/val_wa"]=val_mAUC
             logging.info('---------------evaluate weight averages model on the evaluation set---------------')
+            print("---------------evaluate weight averages model on the evaluation set---------------")
             stats, _ = validate(rank, n_gpus, audio_model, eval_loader, args, 'wa_eval_set')
             eval_mAP = np.mean([stat['AP'] for stat in stats])
             eval_mAUC = np.mean([stat['auc'] for stat in stats])
@@ -333,6 +351,7 @@ def run(rank, n_gpus, args):
 
             # evaluate the ensemble results
             logging.info('---------------evaluate ensemble model on the validation set---------------')
+            print("---------------evaluate ensemble model on the validation set---------------")
             # this is already done in the training process, only need to load
             result = np.loadtxt(args.exp_dir + '/result.csv', delimiter=',')
             val_mAP = result[-1, -3]
@@ -342,15 +361,19 @@ def run(rank, n_gpus, args):
             info["mAP/val_ensemble"]=val_mAP
             info["AUC/val_ensemble"]=val_mAUC
             logging.info('---------------evaluate ensemble model on the evaluation set---------------')
+            print("---------------evaluate ensemble model on the evaluation set---------------")
             # get the prediction of each checkpoint model
-            for epoch in range(1, args.n_epochs+1):
+            for epoch in range(2, args.n_epochs+1):
+                if(os.path.exists(args.exp_dir + '/predictions/predictions_eval_' + str(epoch) + '.csv')):
+                    continue
                 sd = torch.load(args.exp_dir + '/models/audio_model.' + str(epoch) + '.pth', map_location=device)
-                audio_model.load_state_dict(sd["state_dict"])
-                validate(audio_model, eval_loader, args, 'eval_'+str(epoch))
+                sd = sd["state_dict"] if (isinstance(sd, dict) and "state_dict" in sd.keys()) else sd
+                audio_model.load_state_dict(sd)
+                validate(rank, n_gpus, audio_model, eval_loader, args, 'eval_'+str(epoch))
             # average the checkpoint prediction and calculate the results
             target = np.loadtxt(args.exp_dir + '/predictions/eval_target.csv', delimiter=',')
             ensemble_predictions = np.zeros_like(target)
-            for epoch in range(1, args.n_epochs + 1):
+            for epoch in range(2, args.n_epochs + 1):
                 cur_pred = np.loadtxt(args.exp_dir + '/predictions/predictions_eval_' + str(epoch) + '.csv', delimiter=',')
                 ensemble_predictions += cur_pred
             ensemble_predictions = ensemble_predictions / args.n_epochs
@@ -413,3 +436,11 @@ def run(rank, n_gpus, args):
 if __name__ == "__main__":
     main()
     cleanup()
+
+# if __name__ == "__main__":
+#     fsdexppath="exp"
+#     for folder in os.listdir(fsdexppath):
+#         print("In: ", folder)
+#         if(os.path.exists(os.path.join(fsdexppath, folder, "stats_40.pickle")) and not os.path.exists(os.path.join(fsdexppath, folder, "ensemble_result"))):
+#             main(os.path.join(fsdexppath, folder, "args.pkl"))
+#             cleanup()

@@ -20,7 +20,7 @@ psla=True
 eff_b=2
 dataset=fsd50k
 
-if [ $psla == True ]
+if [ "$psla" = "True" ]
 then
   impretrain=True
   freqm=48
@@ -36,25 +36,22 @@ else
 fi
 
 lr=5e-4
-
 trpath=./datafiles/fsd50k_tr_full.json
 
-for preserve_ratio in 0.1
+for preserve_ratio in 0.1 0.25 0.5
 do
 alpha=1.0
 beta=1.0
-
 epoch=40
 wa_start=21
 wa_end=40
-
-use_leaf=True
-
 lrscheduler_start=10
-hop_ms=10
-batch_size=1
+hop_ms=$2
+batch_size=8
 graph_weight_path=undirected_graph_connectivity_no_root.npy
-note=fsd50k
+
+note=exp12_0.1_zero_threshold
+
 learn_pos_emb=False
 target_length=3000
 reweight_loss=False
@@ -62,17 +59,16 @@ seed=21195
 weight_func=calculate_class_weight_v10
 sampler=$1
 lambda_zero_loss=1.0
-
+apply_zero_loss_threshold=0.1
 exp_dir=./exp/${date}-${dataset}-${sampler}-posemb${learn_pos_emb}-alpha${alpha}-beta${beta}-hop${hop_ms}-${target_length}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-seed${seed}
-# exp_dir=./exp/avg-pool-0.1-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
 mkdir -p $exp_dir
 
 python ../../src/run.py --data-train $trpath --data-val ./datafiles/fsd50k_val_full.json --data-eval ./datafiles/fsd50k_eval_full.json \
---exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 0 --label-csv ./class_labels_indices.csv \
+--exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 8 --label-csv ./class_labels_indices.csv \
 --n_class 200 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
 --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} \
---freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} \
+--freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} --apply_zero_loss_threshold ${apply_zero_loss_threshold} \
 --dataset_mean -13.9325 --dataset_std 3.7020 --target_length ${target_length} --noise False --learn_pos_emb ${learn_pos_emb} --lambda_zero_loss ${lambda_zero_loss} \
---metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 --note ${note} --use_leaf ${use_leaf} \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 --note ${note} \
 --alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} --val_interval 1
 done

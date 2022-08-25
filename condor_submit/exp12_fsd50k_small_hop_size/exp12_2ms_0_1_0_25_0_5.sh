@@ -11,4 +11,4 @@ PROJECT="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla&/mnt/fast/nobacku
 ######################## RUNNING ENTRY ########################
 cd /mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_$IDENTIFIER/egs/fsd50k
 
-sh exp12_small_hop_size.sh $1 
+sh exp12_small_hop_size.sh $1 2

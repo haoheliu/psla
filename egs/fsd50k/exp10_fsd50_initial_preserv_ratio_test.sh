@@ -50,7 +50,7 @@ hop_ms=10
 batch_size=8
 graph_weight_path=undirected_graph_connectivity_no_root.npy
 
-note=bsl_fsd50k
+note=exp10_10ms_fsd50k
 
 learn_pos_emb=False
 target_length=3000

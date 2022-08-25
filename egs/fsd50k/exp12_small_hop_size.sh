@@ -37,20 +37,20 @@ fi
 
 lr=5e-4
 trpath=./datafiles/fsd50k_tr_full.json
-preserve_ratio=0.1
 
-for beta in 1.0
+for preserve_ratio in 0.1 0.25 0.5 0.05
 do
 alpha=1.0
+beta=1.0
 epoch=40
 wa_start=21
 wa_end=40
 lrscheduler_start=10
-hop_ms=2
+hop_ms=$2
 batch_size=8
 graph_weight_path=undirected_graph_connectivity_no_root.npy
 
-note=exp11_weight
+note=exp12_small_hop_size
 
 learn_pos_emb=False
 target_length=3000
@@ -61,7 +61,6 @@ sampler=$1
 lambda_zero_loss=1.0
 
 exp_dir=./exp/${date}-${dataset}-${sampler}-posemb${learn_pos_emb}-alpha${alpha}-beta${beta}-hop${hop_ms}-${target_length}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-seed${seed}
-# exp_dir=./exp/avg-pool-0.1-${model}-${eff_b}-${lr}-fsd50k-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-le${p}-2
 mkdir -p $exp_dir
 
 python ../../src/run.py --data-train $trpath --data-val ./datafiles/fsd50k_val_full.json --data-eval ./datafiles/fsd50k_eval_full.json \

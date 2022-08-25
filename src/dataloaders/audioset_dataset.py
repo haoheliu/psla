@@ -171,10 +171,21 @@ class AudiosetDataset(Dataset):
         elif p < 0:
             fbank = fbank[0:target_length, :]
 
+        # target_length = self.audio_conf.get('target_length') * 160 
+        # n_frames = waveform.shape[1]
+
+        # p = target_length - n_frames
+        # if p > 0:
+        #     # m = torch.nn.ZeroPad2d((0, 0, 0, p))
+        #     waveform = torch.nn.functional.pad(waveform, (0, p), mode='constant', value=0.0) 
+        #     # fbank = m(fbank)
+        # elif p < 0:
+        #     waveform = waveform[:, :target_length]
+        
         if filename2 == None:
-            return fbank, 0, waveform
+            return fbank, 0
         else:
-            return fbank, mix_lambda, waveform
+            return fbank, mix_lambda
 
     def __getitem__(self, index):
         """
@@ -197,7 +208,7 @@ class AudiosetDataset(Dataset):
                     mix_sample_idx = random.randint(0, len(self.data)-1)
                     mix_datum = self.data[mix_sample_idx]
                     # get the mixed fbank
-                    fbank, mix_lambda, waveform = self._wav2fbank(datum['wav'], mix_datum['wav'])
+                    fbank, mix_lambda = self._wav2fbank(datum['wav'], mix_datum['wav'])
                     break
                 except:
                     # print("error reading file during mixup", datum['wav'], mix_datum['wav'])
@@ -220,7 +231,7 @@ class AudiosetDataset(Dataset):
                 try:
                     datum = self.data[index]
                     label_indices = np.zeros(self.label_num)
-                    fbank, mix_lambda, waveform = self._wav2fbank(datum['wav'])
+                    fbank, mix_lambda = self._wav2fbank(datum['wav'])
                     break
                 except Exception as e:
                     # print("error reading file", datum['wav'])
@@ -263,8 +274,6 @@ class AudiosetDataset(Dataset):
         if self.noise == True:
             fbank = fbank + torch.rand(fbank.shape[0], fbank.shape[1]) * np.random.rand() / 10
             fbank = torch.roll(fbank, np.random.randint(-10, 10), 0)
-
-        # the output fbank shape is [time_frame_num, frequency_bins], e.g., [1024, 128]
 
         # the output fbank shape is [time_frame_num, frequency_bins], e.g., [1024, 128]
         if(self.mode == "evaluation"):

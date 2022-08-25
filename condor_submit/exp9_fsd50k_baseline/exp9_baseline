@@ -35,5 +35,5 @@ request_memory = 32G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
-queue 1 type in DoNothing
+queue 1 type in BaselineAdaAvgPool
 # -----------------------------------

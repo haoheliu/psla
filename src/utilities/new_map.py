@@ -278,8 +278,7 @@ def build_ontology_tps_sample_weight(target, weight, class_idx):
 
 def build_tps_fps_weight(target, weight, graph_weight_path, preserve_ratio, refresh=False, beta=1.0):
     fps_tps_lookup = {}
-    save_path = graph_weight_path+"_%s_%s_fps_tps_lookup.pkl" % (str(preserve_ratio), beta)
-
+    save_path = graph_weight_path+"_%s_%s_fps_tps_lookup_%s.pkl" % (str(preserve_ratio), beta, target.shape[0])
     if(refresh or not os.path.exists(save_path)):
         for i in tqdm(range(target.shape[1])):
             # For each class
