@@ -35,5 +35,5 @@ request_memory = 96G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
-queue 1 type in NewAlgoDilatedConv1d
+queue 1 type in NewAlgoDilatedConv1dIntp
 # -----------------------------------

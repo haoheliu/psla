@@ -168,7 +168,7 @@ def run(rank, n_gpus, args):
     if(rank == 0):
         wandb.init(
         project="iclr2023",
-        mode="disabled", # TODO
+        # mode="disabled", # TODO
         name=os.path.basename(args.exp_dir),
         notes=args.note,
         tags=[args.sampler],

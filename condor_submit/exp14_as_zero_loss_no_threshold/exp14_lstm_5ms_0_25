@@ -25,15 +25,15 @@ Environment = PYTHONIOENCODING=UTF-8
 +GPUMem = 8000
 # -------------------------------------
 # Requirements for the Job
-requirements = (CUDADeviceName == "GeForce RTX 2080 Ti") || (CUDADeviceName == "GeForce RTX 3090") || (CUDADeviceName == "Quadro RTX 8000") 
+requirements = (machine!="nain.eps.surrey.ac.uk") && (CUDADeviceName == "GeForce RTX 2080 Ti") || (CUDADeviceName == "GeForce RTX 3090")
 
 # --------------------------------------
 # Resources
-request_GPUs     = 3
+request_GPUs     = 2
 request_CPUs     = 1
 request_memory = 96G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
-queue 1 type in NewAlgoDilatedConv1d
+queue 1 type in NewAlgoLSTMLayerNormIntp
 # -----------------------------------
