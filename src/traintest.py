@@ -255,12 +255,12 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                 acc = stats[0]['acc']
                 
                 fps_ap = np.mean([stat['mean_fps_ap'] for stat in stats])
-                tps_ap = np.mean([stat['mean_tps_ap'] for stat in stats])
-                tps_fps_ap = np.mean([stat['mean_tps_fps_ap'] for stat in stats])
+                # tps_ap = np.mean([stat['mean_tps_ap'] for stat in stats])
+                # tps_fps_ap = np.mean([stat['mean_tps_fps_ap'] for stat in stats])
                 
-                logging_info(rank, "mAP %s, mAUC %s, acc %s, mean_fps_ap %s, mean_tps_ap %s, mean_tps_fps_ap %s" % (mAP, mAUC, acc, fps_ap, tps_ap, tps_fps_ap))
+                logging_info(rank, "mAP %s, mAUC %s, acc %s, mean_fps_ap %s" % (mAP, mAUC, acc, fps_ap))
                 
-                val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc, "mean_fps_ap": fps_ap, "mean_tps_ap": tps_ap, "mean_tps_fps_ap": tps_fps_ap}
+                val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc, "mean_fps_ap": fps_ap}
                 
                 for k in val_info.keys():
                     print(k, val_info[k])

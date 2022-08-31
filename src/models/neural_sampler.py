@@ -90,9 +90,9 @@ class PositionalEncoding(nn.Module):
 
 # Use Non-NN method 
 class NeuralSamplerLargeEnergy(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NeuralSamplerLargeEnergy, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -204,10 +204,10 @@ class NeuralSamplerLargeEnergy(nn.Module):
         alpha = torch.sum(weight, dim=1, keepdim=True)
         return weight/(alpha+1e-8)
 # Use DNN
-class NewAlgoEnergy(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
-        super(NewAlgoEnergy, self).__init__()
-        self.input_dim=128
+class NewAlgoEnergyv2(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+        super(NewAlgoEnergyv2, self).__init__()
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -226,7 +226,7 @@ class NewAlgoEnergy(nn.Module):
 
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
         score = energy
@@ -348,12 +348,11 @@ class NewAlgoEnergy(nn.Module):
         ret['score']=score
         return ret
 
-
 # 0.64
 class NewAlgoDilatedConv1dMaxPool(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NewAlgoDilatedConv1dMaxPool, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -374,7 +373,7 @@ class NewAlgoDilatedConv1dMaxPool(nn.Module):
 
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
         score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
@@ -567,9 +566,11 @@ class NewAlgoDilatedConv1dMaxPool(nn.Module):
 
 # Changing the step size
 class NeuralSamplerUniformPool(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NeuralSamplerUniformPool, self).__init__()
         self.feature_channels=1
+        self.mean = mean
+        self.std = std
 
         self.preserv_ratio=preserve_ratio
         self.input_seq_length = input_seq_length
@@ -619,7 +620,7 @@ class NeuralSamplerUniformPool(nn.Module):
 
     def forward(self, x):
         ret={}
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         ret['energy'],_=self.score_norm(energy, self.output_seq_length)
         ret['score'],_=self.score_norm(energy, self.output_seq_length)
@@ -645,9 +646,9 @@ class NeuralSamplerUniformPool(nn.Module):
             
 # TODO
 class BaselineAdaAvgMaxPool(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(BaselineAdaAvgMaxPool, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -665,7 +666,7 @@ class BaselineAdaAvgMaxPool(nn.Module):
     def forward(self, x):
         # torch.Size([96, 1056, 128])
         ret = {}
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
 
         score = torch.ones_like(x[...,0:1]).to(x.device)
@@ -734,9 +735,9 @@ class BaselineAdaAvgMaxPool(nn.Module):
 
 # TODO
 class BaselineAdaAvgPool(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(BaselineAdaAvgPool, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -753,7 +754,7 @@ class BaselineAdaAvgPool(nn.Module):
     def forward(self, x):
         # torch.Size([96, 1056, 128])
         ret = {}
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
 
         score = torch.ones_like(x[...,0:1]).to(x.device)
@@ -821,10 +822,10 @@ class BaselineAdaAvgPool(nn.Module):
         return score, total_length
     
 # Use DNN
-class NewAlgoDilatedConv1dPlusEnergy(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
-        super(NewAlgoDilatedConv1dPlusEnergy, self).__init__()
-        self.input_dim=128
+class NewAlgoDilatedConv1dPlusEnergyv2(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+        super(NewAlgoDilatedConv1dPlusEnergyv2, self).__init__()
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -845,13 +846,13 @@ class NewAlgoDilatedConv1dPlusEnergy(nn.Module):
 
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         energy,_=self.score_norm(energy, self.output_seq_length)
 
-        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1)) 
-        ret['score']=score
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1)) + energy 
         ret = self.select_feature_fast(x, score+energy, total_length=self.output_seq_length)
+        ret['score']=score
         ret['x']=x
         ret['energy']=energy
         return ret
@@ -969,9 +970,9 @@ class NewAlgoDilatedConv1dPlusEnergy(nn.Module):
         return ret
 
 class BaselineConstantScore(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(BaselineConstantScore, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -991,7 +992,7 @@ class BaselineConstantScore(nn.Module):
 
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
 
         score = torch.ones_like(x[...,0:1]).to(x.device)
@@ -1114,9 +1115,9 @@ class BaselineConstantScore(nn.Module):
         return ret
 
 class NewAlgoDilatedConv1d(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NewAlgoDilatedConv1d, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -1137,7 +1138,7 @@ class NewAlgoDilatedConv1d(nn.Module):
 
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
         ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
@@ -1262,9 +1263,9 @@ class NewAlgoDilatedConv1dIntp(nn.Module):
     Args:
         nn (_type_): _description_
     """
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NewAlgoDilatedConv1dIntp, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -1288,7 +1289,7 @@ class NewAlgoDilatedConv1dIntp(nn.Module):
 
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
         pooled = self.pool(x)
@@ -1418,12 +1419,207 @@ class NewAlgoDilatedConv1dIntp(nn.Module):
         ret['score']=score
         return ret 
   
-
 # Use extra large lstm model
 class NewAlgoLSTMLayerNormIntp(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NewAlgoLSTMLayerNormIntp, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
+        self.latent_dim=64
+        self.feature_dim=128
+        self.num_layers=2
+        self.feature_channels=2
+        self.preserv_ratio=preserve_ratio
+        self.input_seq_length = input_seq_length
+        self.output_seq_length = int(self.input_seq_length * self.preserv_ratio)
+        self.use_pos_emb = True
+        self.input_bn = nn.BatchNorm2d(1)
+        
+        self.pre_linear = nn.Sequential(
+            nn.Linear(self.input_dim, self.input_dim*2),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.input_dim*2, self.input_dim),
+        )
+
+        self.pooling = torch.nn.AdaptiveAvgPool1d(self.output_seq_length)
+        self.max_pooling = torch.nn.AdaptiveMaxPool1d(self.output_seq_length)
+        
+        self.layernorm_lstm_start = nn.LayerNorm([self.output_seq_length, self.input_dim])
+        self.feature_lstm_1 = nn.LSTM(self.input_dim, self.latent_dim, 1, batch_first=True, bidirectional=True)
+        self.layernorm_lstm_middle = nn.LayerNorm([self.output_seq_length, self.latent_dim*2])
+        self.feature_lstm_2 = nn.LSTM(self.latent_dim*2, self.latent_dim, 1, batch_first=True, bidirectional=True)
+        
+        self.linear_lstm = nn.Sequential(
+            nn.Linear(self.latent_dim*2, 1),
+        )
+        
+        if(self.use_pos_emb):
+            emb_dropout=0.0
+            logging.info("Use positional embedding")
+            pos_emb_y = PositionalEncoding(d_model=self.input_dim, dropout=emb_dropout, max_len=self.input_seq_length)(torch.zeros((1,self.input_seq_length, self.input_dim))) 
+            self.pos_emb = nn.Parameter(pos_emb_y, requires_grad=False)
+    
+        init_gru(self.feature_lstm_1)
+        init_gru(self.feature_lstm_2)
+        self.init_seq_linear(self.pre_linear)
+        self.init_seq_linear(self.linear_lstm)
+        init_bn(self.input_bn)
+
+    def init_seq_linear(self, sequencial):
+        for i in range(len(sequencial)):
+            if(isinstance(sequencial[i], nn.Linear)):
+                init_layer(sequencial[i])
+
+    def interpolate(self, score):
+        return torch.nn.functional.interpolate(score, size=self.input_seq_length, mode='linear')
+
+    def pool(self, x):
+        return (self.pooling(x.permute(0,2,1)).permute(0,2,1) + self.max_pooling(x.permute(0,2,1)).permute(0,2,1)) / 2
+
+    def forward(self, x):
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        pooled = self.pool(x)
+        
+        pooled = self.input_bn(pooled.unsqueeze(1)).squeeze(1)
+        pooled = self.pre_linear(pooled) + pooled
+        pooled = self.layernorm_lstm_start(pooled)
+        feature_1, (hn, cn) = self.feature_lstm_1(pooled)
+        feature_1 = self.layernorm_lstm_middle(feature_1)
+        feature_2, (hn, cn) = self.feature_lstm_2(feature_1, (hn, cn))
+        score = torch.sigmoid(self.linear_lstm(feature_2))
+        
+        score = self.interpolate(score.permute(0,2,1)).permute(0,2,1)
+        
+        # TODO
+        score, total_length = self.score_norm(score, self.output_seq_length)
+        score += self.preserv_ratio * 0.1
+        score, total_length = self.score_norm(score, self.output_seq_length)
+        
+        ret = self.select_feature_fast(x, score, total_length=total_length)
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(511)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(512)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(513)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(514)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(515)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def score_norm(self, score, total_length):
+        ####################################################################
+        # Trying to rescale the total score 
+        sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+        # Normalize the sum of score to the total length
+        score = (score / sum_score) * total_length
+        # If the original total legnth is smaller, we need to normalize the value greater than 1.  
+        ####################################################################
+
+        ####################################################################
+        # If the weight for one frame is greater than one, rescale the batch
+        max_val = torch.max(score, dim=1)[0]
+        max_val = max_val[..., 0]
+        dims_need_norm = max_val >= 1
+        if(torch.sum(dims_need_norm) > 0):
+            score[dims_need_norm] = score[dims_need_norm] / max_val[dims_need_norm][..., None, None]
+        ####################################################################
+
+        ####################################################################
+        # Remove the zero pad at the end, using the rescaling of the weight in between 
+        # torch.Size([32, 1056, 1])
+        if(torch.sum(dims_need_norm) > 0):
+            sum_score = torch.sum(score, dim=(1,2), keepdim=True)
+            distance_with_target_length = (total_length-sum_score)[:,0,0]
+            axis = torch.logical_and(score < RESCALE_INTERVEL_MAX, score > RESCALE_INTERVEL_MIN) # TODO here 0.1 or RESCALE_INTERVEL_MIN
+            for i in range(score.size(0)):
+                if(distance_with_target_length[i] >= 1):
+                    intervel = 1.0-score[i][axis[i]]
+                    alpha = distance_with_target_length[i] / torch.sum(intervel) 
+                    if(alpha > 1): alpha=1
+                    score[i][axis[i]] += intervel * alpha
+        ####################################################################
+        return score, total_length
+
+    def locate_first_and_last_position(self, mask):
+        """Locate the first non-negative in a row, and the element before the last non-negative element in a row
+
+        Args:
+            mask (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        bs, orig_len, target_len = mask.size()
+        
+        assert orig_len >= target_len
+
+        weight = torch.tensor([-1.0,1.0]).expand(target_len,-1).to(mask.device)
+        weight = weight.unsqueeze(1)
+        value = torch.nn.functional.conv1d(mask.permute(0,2,1).float(), weight, bias=None, stride=1, padding=0, dilation=1, groups=target_len)
+        value = torch.nn.functional.pad(value, (1,0))
+        value = value.permute(0,2,1)
+        return value == 1, value == -1
+
+    def select_feature_fast(self, feature, score, total_length):
+        ret = {}
+        
+        # Normalize the socre value
+        
+
+        # Monotonic Expansion
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # Get the masked weight
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+
+        # Make the sum or each row to one
+        weight_sum = torch.sum(weight, dim=1, keepdim=True)
+        one_minus_weight_sum = 1-weight_sum
+        one_minus_weight_sum_cumsum = torch.cumsum(one_minus_weight_sum, dim=2)
+        need_minus, need_add = self.locate_first_and_last_position(mask)
+        need_minus = need_minus[:,:,1:] * one_minus_weight_sum_cumsum[:,:,:-1]
+        need_minus = torch.nn.functional.pad(need_minus,(1,0))
+        need_add = need_add * one_minus_weight_sum_cumsum
+        weight = weight - need_minus + need_add
+
+        tensor_list = torch.matmul(weight.permute(0,2,1), feature)
+        pos_emb = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+
+        ret['emb'] = pos_emb
+        ret['feature'] = torch.cat([tensor_list.unsqueeze(1), pos_emb.unsqueeze(1)], dim=1)
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret 
+
+# Use extra large lstm model
+class NewAlgoLSTMLayerNormIntpPlusEnergyv2(nn.Module):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+        super(NewAlgoLSTMLayerNormIntpPlusEnergyv2, self).__init__()
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -1477,7 +1673,7 @@ class NewAlgoLSTMLayerNormIntp(nn.Module):
 
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
         pooled = self.pool(x)
@@ -1490,7 +1686,7 @@ class NewAlgoLSTMLayerNormIntp(nn.Module):
         feature_2, (hn, cn) = self.feature_lstm_2(feature_1, (hn, cn))
         score = torch.sigmoid(self.linear_lstm(feature_2))
         
-        score = self.interpolate(score.permute(0,2,1)).permute(0,2,1)
+        score = self.interpolate(score.permute(0,2,1)).permute(0,2,1) + energy
 
         ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
         ret['x']=x
@@ -1610,13 +1806,11 @@ class NewAlgoLSTMLayerNormIntp(nn.Module):
         ret['score']=score
         return ret 
 
-
-
 # 0.64
 class NewAlgoDilatedConv1dMaxPoolScaleChIntp(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NewAlgoDilatedConv1dMaxPoolScaleChIntp, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -1646,7 +1840,7 @@ class NewAlgoDilatedConv1dMaxPoolScaleChIntp(nn.Module):
     
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
         pooled = self.pool(x)
@@ -1824,9 +2018,9 @@ class NewAlgoDilatedConv1dMaxPoolScaleChIntp(nn.Module):
     
 # Use DNN
 class NewAlgoDilatedConv1dPlusPos(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NewAlgoDilatedConv1dPlusPos, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -1847,7 +2041,7 @@ class NewAlgoDilatedConv1dPlusPos(nn.Module):
 
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
         score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
@@ -1969,9 +2163,9 @@ class NewAlgoDilatedConv1dPlusPos(nn.Module):
         return ret 
 
 
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NeuralSamplerLargeEnergyNNFreezePosv4, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -2014,7 +2208,7 @@ class NewAlgoDilatedConv1dPlusPos(nn.Module):
 
     def forward(self, x):
         # torch.Size([96, 1056, 128])
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
         pre_x = self.pre_linear(x) + x
@@ -2123,9 +2317,9 @@ class NewAlgoDilatedConv1dPlusPos(nn.Module):
 
 # Use large LSTM
 class FrameLSTM(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(FrameLSTM, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -2161,7 +2355,7 @@ class FrameLSTM(nn.Module):
         # torch.Size([96, 1056, 128])
         ret = {}
         ret['x']=x
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         ret['energy'],_=self.score_norm(energy, self.output_seq_length)
         ret['score'],_=self.score_norm(energy, self.output_seq_length)
@@ -2229,9 +2423,9 @@ class FrameLSTM(nn.Module):
 
 # Use large LSTM
 class MappingDNN(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(MappingDNN, self).__init__()
-        self.input_dim=128
+        self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
         self.feature_dim=128
         self.num_layers=2
@@ -2262,7 +2456,7 @@ class MappingDNN(nn.Module):
         # torch.Size([96, 1056, 128])
         ret = {}
         ret['x']=x
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         ret['energy'],_=self.score_norm(energy, self.output_seq_length)
         ret['score'],_=self.score_norm(energy, self.output_seq_length)
@@ -2326,8 +2520,10 @@ class MappingDNN(nn.Module):
         return score, total_length
 
 class DoNothing(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(DoNothing, self).__init__()
+        self.mean = mean
+        self.std = std
         self.feature_channels=1
         self.preserv_ratio=preserve_ratio
         self.input_seq_length = input_seq_length
@@ -2342,7 +2538,7 @@ class DoNothing(nn.Module):
     
     def forward(self, x):
         ret={}
-        magnitude = torch.sum(x.exp(), dim=2, keepdim=True)
+        magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
         ret['energy'],_=self.score_norm(energy, self.output_seq_length)

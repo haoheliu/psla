@@ -69,7 +69,7 @@ def update_target_length_preserve_ratio(args):
     args.preserve_ratio = args.preserve_ratio * (args.hop_ms / 10) # The 10ms one is the baseline
     args.target_length = int(args.target_length * (10 / args.hop_ms))
     args.output_seq_len = int(args.target_length * args.preserve_ratio)
-    msg = "Hop length %s ms; Target length %s; Preserve ratio: %s; " % (args.hop_ms, args.target_length, args.preserve_ratio)
+    msg = "Hop length %s ms; Target length %s; Output seq len %s; Preserve ratio: %s; " % (args.hop_ms, args.target_length, args.output_seq_len, args.preserve_ratio)
     print(msg)
     return args
     
@@ -143,9 +143,9 @@ def main(argpath=None):
         parser.add_argument("--use_leaf", type=ast.literal_eval, default=False)
         
         args = parser.parse_args()
-        
-        args = adaptive_batchsize(args)
+    
         args = update_target_length_preserve_ratio(args)
+        args = adaptive_batchsize(args)
         
     else:
         args = load_pickle(argpath)
@@ -258,7 +258,7 @@ def run(rank, n_gpus, args):
                 batch_size=args.batch_size // 2, shuffle=False, num_workers=args.num_workers // 4, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
 
     if args.model == 'efficientnet':
-        audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha, learn_pos_emb=args.learn_pos_emb, use_leaf=args.use_leaf)
+        audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha, learn_pos_emb=args.learn_pos_emb, use_leaf=args.use_leaf,  mean=args.dataset_mean, std = args.dataset_std)
     elif args.model == 'resnet':
         audio_model = models.ResNetAttention(label_dim=args.n_class, pretrain=args.impretrain)
     elif args.model == 'mbnet':

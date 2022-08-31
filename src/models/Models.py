@@ -78,7 +78,7 @@ class MBNet(nn.Module):
         return out
 
 class EffNetAttention(nn.Module):
-    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False, use_leaf=False):
+    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False, use_leaf=False, mean=-7.4106, std=6.3097):
         super(EffNetAttention, self).__init__()
         self.middim = [1280, 1280, 1408, 1536, 1792, 2048, 2304, 2560]
         self.input_seq_length = input_seq_length
@@ -86,7 +86,7 @@ class EffNetAttention(nn.Module):
         self.learn_pos_emb = learn_pos_emb
         self.alpha = alpha
 
-        self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha, self.learn_pos_emb)
+        self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha, self.learn_pos_emb, mean, std)
         
         if pretrain == False:
             print('EfficientNet Model Trained from Scratch (ImageNet Pretraining NOT Used).')
@@ -131,7 +131,7 @@ class EffNetAttention(nn.Module):
         ret = self.neural_sampler(x)
         x, score, energy = ret['feature'], ret['score'], ret['energy']
         
-        if(self.rank == 0 and self.batch_idx % 2000 == 0 and self.training):
+        if(self.rank == 0 and self.batch_idx % 300 == 0 and self.training):
             self.neural_sampler.visualize(ret)
 
         x = x.transpose(2, 3)
