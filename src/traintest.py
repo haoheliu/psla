@@ -243,7 +243,7 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                     if np.isnan(loss_meter.avg):
                         logging.error("training diverged...")
                         return
-                    
+                       
         if(rank == 0):
             if(epoch % args.val_interval == 0):
                 logging_info(rank, 'start validation')
@@ -252,15 +252,15 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
 
                 mAP = np.mean([stat['AP'] for stat in stats])
                 mAUC = np.mean([stat['auc'] for stat in stats])
+                
                 acc = stats[0]['acc']
+                fps_ap = stats[0]['fps_ap']
+                fps_curve = stats[0]['fps_curve']
+                draw_fps_curve(epoch, fps_curve, args.exp_dir)
                 
-                fps_ap = np.mean([stat['mean_fps_ap'] for stat in stats])
-                # tps_ap = np.mean([stat['mean_tps_ap'] for stat in stats])
-                # tps_fps_ap = np.mean([stat['mean_tps_fps_ap'] for stat in stats])
+                logging_info(rank, "mAP %s, mAUC %s, acc %s, fps_ap %s" % (mAP, mAUC, acc, fps_ap))
                 
-                logging_info(rank, "mAP %s, mAUC %s, acc %s, mean_fps_ap %s" % (mAP, mAUC, acc, fps_ap))
-                
-                val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc, "mean_fps_ap": fps_ap}
+                val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc, "fps_ap": fps_ap}
                 
                 for k in val_info.keys():
                     print(k, val_info[k])
@@ -360,6 +360,13 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
             # logging_info(rank, "d_prime: {:.6f}".format(d_prime(mAUC)))
             np.savetxt(exp_dir + '/wa_result.csv', wa_result)
 
+def draw_fps_curve(epoch, fps_curve, exp_dir):
+    import matplotlib.pyplot as plt
+    plt.plot(fps_curve)
+    plt.ylim([0.0,1.0])
+    plt.savefig(os.path.join(exp_dir, "fps_curve_%s.png" % epoch))
+    plt.close()
+
 def validate(rank, n_gpus, audio_model, val_loader, args, epoch, eval_target=False):  
     device = torch.device("cuda:%s" % rank if torch.cuda.is_available() else "cpu")
     batch_time = AverageMeter()
@@ -409,7 +416,7 @@ def validate(rank, n_gpus, audio_model, val_loader, args, epoch, eval_target=Fal
         path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
         save_pickle(output_dict, os.path.join(path, "%s_%s.pkl" % (args.sampler, epoch)))
 
-        stats = calculate_stats(audio_output, target, args)   
+        stats = calculate_stats(audio_output.cpu().numpy(), target.cpu().numpy(), args)   
         # save the prediction here  
         exp_dir = args.exp_dir  
         if os.path.exists(exp_dir+'/predictions') == False: 

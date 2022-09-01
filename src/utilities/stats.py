@@ -4,7 +4,7 @@ import numpy as np
 from scipy import stats
 from sklearn import metrics
 import torch
-from utilities.new_map import mean_average_precision
+from utilities.new_map import ontology_mean_average_precision
 import logging
 
 def d_prime(auc):
@@ -24,19 +24,18 @@ def calculate_stats(output, target, args):
     """
     classes_num = target.shape[-1]
     stats = []
-    fps_ap_different_beta = {}
-    tps_ap_different_beta = {}
-    tps_fps_ap_different_beta = {}
-    for beta in np.linspace(0.1,3.0,30):
-        ap, fps_ap = mean_average_precision(target, output, args.graph_weight_path, args.preserve_ratio, beta=beta)
-        
-        fps_ap_different_beta["fps_ap_%.2f" % beta] = np.mean(fps_ap)
-        
-        logging.info("beta (%s): ap %s, fps_ap %s" % (beta, np.mean(ap), np.mean(fps_ap)))
-        print("beta (%s): ap %s, fps_ap %s" % (beta, np.mean(ap), np.mean(fps_ap)))
     
-    print("Mean average fps ap: ", np.mean([fps_ap_different_beta[k] for k in fps_ap_different_beta.keys()]))
-    print([fps_ap_different_beta[k] for k in fps_ap_different_beta.keys()])
+    ap, fps_ap = ontology_mean_average_precision(target, output, args.graph_weight_path)
+    
+    ap_curve = [np.mean(ap[k]) for k in ap.keys()]
+    average_ontology_ap = np.mean(ap_curve)
+    fps_curve = [np.mean(fps_ap[k]) for k in fps_ap.keys()]
+    average_ontology_fps_ap = np.mean(fps_curve)
+    
+    logging.info("ap %s, fps_ap %s" % (average_ontology_ap, average_ontology_fps_ap))
+        
+    print("ap %s, fps_ap %s" % (average_ontology_ap, average_ontology_fps_ap))
+
     # print("Mean average tps ap: ", np.mean([tps_ap_different_beta[k] for k in tps_ap_different_beta.keys()]))
     # print("Mean average fps_tps ap: ", np.mean([tps_fps_ap_different_beta[k] for k in tps_fps_ap_different_beta.keys()]))
     
@@ -69,10 +68,18 @@ def calculate_stats(output, target, args):
                 'fnr': 1. - tpr[0::save_every_steps],
                 'auc': auc,
                 'acc': acc,
-                "fps_ap": fps_ap_different_beta,
-                "mean_fps_ap": np.mean([fps_ap_different_beta[k] for k in fps_ap_different_beta.keys()]),
                 }
         stats.append(dict)
-
+        
+    stats[0].update(
+        {
+                "ap": average_ontology_ap,
+                "fps_ap": average_ontology_fps_ap,
+                "fps_raw": fps_ap,
+                "ap_raw": ap,
+                "fps_curve": fps_curve,
+                "ap_curve": ap_curve
+        }
+    )
     return stats
 
