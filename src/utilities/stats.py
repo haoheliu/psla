@@ -5,6 +5,7 @@ from scipy import stats
 from sklearn import metrics
 import torch
 from utilities.new_map import ontology_mean_average_precision
+from utilities.new_map_matmul import mean_average_precision
 import logging
 
 def d_prime(auc):
@@ -25,20 +26,22 @@ def calculate_stats(output, target, args):
     classes_num = target.shape[-1]
     stats = []
     
-    ap, fps_ap = ontology_mean_average_precision(target, output, args.graph_weight_path)
+    fps_ap = ontology_mean_average_precision(target, output, np.load(args.graph_weight_path))
     
-    ap_curve = [np.mean(ap[k]) for k in ap.keys()]
-    average_ontology_ap = np.mean(ap_curve)
+    # ap_curve = [np.mean(ap[k]) for k in ap.keys()]
+    # average_ontology_ap = np.mean(ap_curve)
     fps_curve = [np.mean(fps_ap[k]) for k in fps_ap.keys()]
     average_ontology_fps_ap = np.mean(fps_curve)
     
-    logging.info("ap %s, fps_ap %s" % (average_ontology_ap, average_ontology_fps_ap))
-        
-    print("ap %s, fps_ap %s" % (average_ontology_ap, average_ontology_fps_ap))
-
-    # print("Mean average tps ap: ", np.mean([tps_ap_different_beta[k] for k in tps_ap_different_beta.keys()]))
-    # print("Mean average fps_tps ap: ", np.mean([tps_fps_ap_different_beta[k] for k in tps_fps_ap_different_beta.keys()]))
+    logging.info("Mute based method: fps_ap %s" % ( average_ontology_fps_ap))
+    print("Mute based method: fps_ap %s" % ( average_ontology_fps_ap))
     
+    ap_mm, fps_ap_mm = mean_average_precision(target, output, args.graph_weight_path)
+    average_ontology_ap_mm = np.mean(ap_mm['result'])
+    average_ontology_fps_ap_mm = np.mean(fps_ap_mm['result'])
+    
+    print("MM based method: ap %s, fps_ap %s" % (average_ontology_ap_mm, average_ontology_fps_ap_mm))
+
     # Class-wise statistics
     for k in range(classes_num):
 
@@ -73,12 +76,12 @@ def calculate_stats(output, target, args):
         
     stats[0].update(
         {
-                "ap": average_ontology_ap,
                 "fps_ap": average_ontology_fps_ap,
                 "fps_raw": fps_ap,
-                "ap_raw": ap,
                 "fps_curve": fps_curve,
-                "ap_curve": ap_curve
+                
+                "ap_mm": average_ontology_ap_mm, 
+                "fps_ap_mm": average_ontology_fps_ap_mm, 
         }
     )
     return stats

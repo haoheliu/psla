@@ -134,6 +134,7 @@ def main(argpath=None):
         parser.add_argument("--val_interval", type=int, default=1)
         parser.add_argument("--seed", type=int, default=1234)
         parser.add_argument("--reweight_loss", type=ast.literal_eval, default=False)
+        parser.add_argument("--non_weighted_loss", type=ast.literal_eval, default=True)
         
         parser.add_argument("--apply_zero_loss_threshold", type=float, default=0.5)
         parser.add_argument("--lambda_zero_loss", type=float, default=0.01)
@@ -435,6 +436,8 @@ def run(rank, n_gpus, args):
 
 if __name__ == "__main__":
     main()
+    cmd = "rm ontology_weight*.pkl"
+    os.system(cmd)
     cleanup()
 
 # if __name__ == "__main__":

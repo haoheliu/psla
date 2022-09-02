@@ -10,9 +10,6 @@ import os
 import warnings
 import sklearn
 import torch
-from numba import jit
-import logging
-import pickle
 
 GRAPH_WEIGHT = None
 
@@ -168,6 +165,7 @@ def _binary_clf_curve(y_true, y_score, pos_label=None, tps_weight=None, fps_weig
         # y_true = y_true[nonzero_weight_mask]
         # y_score = y_score[nonzero_weight_mask]
         # sample_weight = sample_weight[nonzero_weight_mask]
+
     pos_label = sklearn.metrics._ranking._check_pos_label_consistency(pos_label, y_true)
 
     # make y_true a boolean vector
@@ -236,61 +234,135 @@ def _average_precision(y_true, pred_scores, tps_weight=None, fps_weight=None):
     AP = numpy.sum((recalls[:-1] - recalls[1:]) * precisions[:-1])
     return AP
 
+def build_label_to_class(label_csv):
+    import pandas as pd
+    label2class = {}
+    csv = pd.read_csv(
+        label_csv
+    )
+    for i, row in csv.iterrows():
+        label2class[int(row["index"])] = row["display_name"]
+    return label2class
+
 def initialize_weight(graph_weight_path):
     # print("Normalize graph connectivity weight by the max value.")
     weight = np.load(
         graph_weight_path
-    )   
+    )
+    # weight = weight ** beta
+    # weight /= np.max(weight)
+    weight /= np.mean(weight)
     return weight
 
-def mask_weight(weight, threshold=1.0):
-    # ones_matrix = np.ones_like(weight)
-    ones_matrix = weight.copy()
-    ones_matrix[weight <= threshold] *= 0
-    diag = np.eye(ones_matrix.shape[0]) == 1
-    if(np.mean(ones_matrix[~diag]) > 1e-9):
-        ones_matrix = ones_matrix / np.mean(ones_matrix[~diag])
-    return ones_matrix
+def build_tps_fps_weight(target, weight):
+    positive_indices = target == 1
+    labels_num = np.sum(positive_indices, axis=1, keepdims=True)
+    fps_weight = (positive_indices @ weight) / labels_num
+    return fps_weight
 
-@jit(nopython=True)
-def build_ontology_fps_sample_weight_min(target, weight, class_idx):
-    ret = []
-    for i in range(target.shape[0]):
-        positive_indices = np.where(target[i] == 1)[0]
-        minimum_distance_with_class_idx = np.min(weight[positive_indices][:, class_idx])
-        ret.append(minimum_distance_with_class_idx)
-    return ret
-
-def build_weight(target, weight):
-    ret = {}
-    path = "ontology_weight_%s.pkl" % os.getpid()
-    if(not os.path.exists(path)):
-        print("Build ontology based metric weight")
-        logging.info("Build ontology based metric weight")
-        for threshold in tqdm(np.linspace(0, int(np.max(weight)), int(np.max(weight))+1)):
-            ret[threshold] = {}
-            masked = mask_weight(weight, threshold)
-            for i in range(target.shape[1]):
-                ret[threshold][i] = build_ontology_fps_sample_weight_min(target, masked, i)
-        save_pickle(ret, path)       
-    else:
-        ret = load_pickle(path)
-    return ret
-            
-def ontology_mean_average_precision(target, clipwise_output, weight):
-    ontology_weight = build_weight(target, weight)
+def mean_average_precision(target, clipwise_output, graph_weight_path):
+    ret_ap = {}
     ret_fps_ap = {}
-    for threshold in tqdm(np.linspace(0, int(np.max(weight)), int(np.max(weight))+1)):
-        fps_ap=[]
-        for i in range(target.shape[1]):
-            fps_weight = ontology_weight[threshold][i]
-            fps_ap.append(
-                _average_precision(
-                    target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=fps_weight
-                )
-            )   
-        ret_fps_ap[threshold] = np.array(fps_ap)
-    return ret_fps_ap
+    weight = initialize_weight(graph_weight_path)
+    tps_fps_weight = build_tps_fps_weight(target, weight)
+    ap = []
+    fps_ap=[]
+    for i in range(target.shape[1]):
+        fps_weight = tps_fps_weight[:, i]
+        ap.append(
+            _average_precision(
+                target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=None
+            )
+        )
+        fps_ap.append(
+            _average_precision(
+                target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=fps_weight
+            )
+        )
+    ret_ap["result"],ret_fps_ap["result"] = np.array(ap), np.array(fps_ap)
+    return ret_ap, ret_fps_ap
+
+# def calculate_class_weight(target, graph_weight_path, beta=1):
+#     global GRAPH_WEIGHT
+#     if(GRAPH_WEIGHT is None):
+#         GRAPH_WEIGHT = torch.tensor(np.load(graph_weight_path), requires_grad=False).float(); 
+#         if(torch.cuda.is_available()): GRAPH_WEIGHT = GRAPH_WEIGHT.cuda()
+#         GRAPH_WEIGHT = (GRAPH_WEIGHT/torch.max(GRAPH_WEIGHT)) 
+#     # Get the distance between each class and samples
+#     weight = torch.matmul(target, GRAPH_WEIGHT**beta) 
+    
+#     # Normalize the weight using the total label of the target
+#     # weight = weight/torch.sum(target, dim=1, keepdim=True) # TODO do we need this?
+
+#     # Normalize the max value to 1.0; Remove this line will degrade the mAP from 0.22 to 0.17
+#     weight = weight/torch.max(weight, dim=1, keepdim=True)[0] # TODO do we need this?
+#     weight[target > 0] = 1.0
+    
+#     return weight
+
+def calculate_class_weight(target, graph_weight_path, beta=1):
+    global GRAPH_WEIGHT
+    if(GRAPH_WEIGHT is None):
+        GRAPH_WEIGHT = torch.tensor(np.load(graph_weight_path), requires_grad=False).float(); 
+        if(torch.cuda.is_available()): GRAPH_WEIGHT = GRAPH_WEIGHT.cuda()
+        GRAPH_WEIGHT = (GRAPH_WEIGHT/torch.max(GRAPH_WEIGHT))
+    # Get the distance between each class and samples
+    weight = torch.matmul(target, GRAPH_WEIGHT**beta) 
+
+    # Normalize the max value to 1.0; Remove this line will degrade the mAP from 0.22 to 0.17
+    weight = weight/torch.max(weight, dim=1, keepdim=True)[0] # TODO do we need this?
+    weight[target > 0] = 1.0
+    return weight / torch.mean(weight)
+
+# def calculate_class_weight_v3(target, graph_weight_path, beta=1):
+#     GRAPH_WEIGHT = torch.tensor(np.load(graph_weight_path), requires_grad=False).float(); 
+#     if(torch.cuda.is_available()): GRAPH_WEIGHT = GRAPH_WEIGHT.cuda()
+#     GRAPH_WEIGHT = (GRAPH_WEIGHT/torch.max(GRAPH_WEIGHT))
+#     # Get the distance between each class and samples
+#     weight = torch.matmul(target, GRAPH_WEIGHT**beta) 
+
+#     # Normalize the max value to 1.0; Remove this line will degrade the mAP from 0.22 to 0.17
+#     weight = weight/torch.max(weight, dim=1, keepdim=True)[0] # TODO do we need this?
+#     weight[target > 0] = 1.0
+#     return weight / torch.mean(weight)
+
+# def calculate_class_weight_v4(target, graph_weight_path, beta=1):
+#     GRAPH_WEIGHT = torch.tensor(np.load(graph_weight_path), requires_grad=False).float(); 
+#     if(torch.cuda.is_available()): GRAPH_WEIGHT = GRAPH_WEIGHT.cuda()
+#     # Get the distance between each class and samples
+#     weight = torch.matmul(target, GRAPH_WEIGHT**beta) 
+
+#     # Normalize the max value to 1.0; Remove this line will degrade the mAP from 0.22 to 0.17
+#     weight = weight/torch.max(weight, dim=1, keepdim=True)[0] # TODO do we need this?
+#     weight[target > 0] = 1.0
+#     return weight / torch.mean(weight)
+
+def test_class_weight(index):
+    graph_weight_path = "/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/egs/audioset/undirected_graph_connectivity_no_root.npy"
+    target = torch.zeros((1, 527))
+    target[0,index] = 1.0
+    weight_1 = calculate_class_weight(target, graph_weight_path=graph_weight_path, beta=0.1)
+    # weight_2 = calculate_class_weight_v2(target, graph_weight_path=graph_weight_path, beta=0.3)
+    weight_3 = calculate_class_weight(target, graph_weight_path=graph_weight_path, beta=0.5)
+    # weight_4 = calculate_class_weight_v2(target, graph_weight_path=graph_weight_path, beta=0.7)
+    weight_5 = calculate_class_weight(target, graph_weight_path=graph_weight_path, beta=0.9)
+    # weight_6 = calculate_class_weight_v2(target, graph_weight_path=graph_weight_path, beta=1.1)
+    weight_7 = calculate_class_weight(target, graph_weight_path=graph_weight_path, beta=1.3)
+    # weight_8 = calculate_class_weight_v2(target, graph_weight_path=graph_weight_path, beta=1.5)
+    weight_9 = calculate_class_weight(target, graph_weight_path=graph_weight_path, beta=2.0)
+    plt.plot(weight_1[0].cpu().numpy())
+    # plt.plot(weight_2[0].cpu().numpy())
+    plt.plot(weight_3[0].cpu().numpy())
+    # plt.plot(weight_4[0].cpu().numpy())
+    plt.plot(weight_5[0].cpu().numpy())
+    # plt.plot(weight_6[0].cpu().numpy())
+    plt.plot(weight_7[0].cpu().numpy())
+    # plt.plot(weight_8[0].cpu().numpy())
+    plt.plot(weight_9[0].cpu().numpy())
+    
+    plt.savefig("weight_beta_%s.png" % index)
+    plt.close()
+    # import ipdb; ipdb.set_trace()
 
 def test():
     """Forward evaluation data and calculate statistics.
@@ -313,29 +385,26 @@ def test():
         output_dict[k] = output_dict[k][index]
     clipwise_output = output_dict["clipwise_output"]  # (audios_num, classes_num)
     target = output_dict["target"]  # (audios_num, classes_num)
-    weight = initialize_weight(graph_weight_path="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/egs/audioset/undirected_graph_connectivity_no_root.npy")
-    ap, fps_ap = ontology_mean_average_precision(target, clipwise_output, weight)
+    ap, fps_ap = mean_average_precision(target, 
+                                       clipwise_output, 
+                                       graph_weight_path="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/egs/audioset/undirected_graph_connectivity_no_root.npy")
     import ipdb; ipdb.set_trace()
     ap_curve = [np.mean(ap[k]) for k in ap.keys()]
     average_ontology_ap = np.mean(ap_curve)
     fps_curve = [np.mean(fps_ap[k]) for k in fps_ap.keys()]
     print("fps_curve", fps_curve)
-    draw_fps_curve(epoch=10, fps_curve=fps_curve, exp_dir=".")
     average_ontology_fps_ap = np.mean(fps_curve)
     print(average_ontology_ap, average_ontology_fps_ap)
     auc = metrics.roc_auc_score(target, clipwise_output, average=None)
     statistics = {"ap": ap,"fps_ap": fps_ap, "auc": auc}
     return statistics
 
-def draw_fps_curve(epoch, fps_curve, exp_dir):
-    import matplotlib.pyplot as plt
-    plt.plot(fps_curve)
-    plt.ylim([0.0,1.0])
-    plt.savefig(os.path.join(exp_dir, "fps_curve_%s.png" % epoch))
-    plt.close()
-
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import torch
-
     res = test()
+    # for k in res.keys():
+    #     print(k, np.mean([res[k]]))
+    # import ipdb; ipdb.set_trace()
+    
+    # test_class_weight(72)

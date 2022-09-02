@@ -23,6 +23,7 @@ import pickle
 from tqdm import tqdm
 import torch
 from utilities.new_map import *
+from utilities.ontology_loss import *
 import wandb
 
 def logging_info(rank, msg):
@@ -160,10 +161,12 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                 epsilon = 1e-7
                 audio_output = torch.clamp(audio_output, epsilon, 1. - epsilon)
                 loss = loss_fn(audio_output, labels)
-                if(args.reweight_loss):
+                if(args.reweight_loss and args.non_weighted_loss):
                     loss_weight = eval(args.weight_func)(labels, args.graph_weight_path, beta=args.beta)
-                    loss_weight = calculate_class_weight(labels, args.graph_weight_path, beta=args.beta)
-                    loss = torch.mean(loss * loss_weight) + torch.mean(loss)
+                    loss = (torch.mean(loss * loss_weight) + torch.mean(loss)) / 2
+                elif(args.reweight_loss and not args.non_weighted_loss):
+                    loss_weight = eval(args.weight_func)(labels, args.graph_weight_path, beta=args.beta)
+                    loss = torch.mean(loss * loss_weight)
                 else:
                     loss = torch.mean(loss)
             # Can this work?
@@ -179,7 +182,7 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                 zero_loss = torch.mean(score_pred[id][score_mask[id]])
                 if(torch.isnan(zero_loss).item()):
                     continue
-                if(zero_loss > args.apply_zero_loss_threshold * args.preserve_ratio):
+                if(args.preserve_ratio < 1.0):
                     loss = loss + args.lambda_zero_loss * zero_loss / score_pred.size(0) # [bs, length, 1]
                 if(zero_loss_final is None):
                     zero_loss_final = zero_loss / score_pred.size(0)
@@ -254,13 +257,15 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                 mAUC = np.mean([stat['auc'] for stat in stats])
                 
                 acc = stats[0]['acc']
-                fps_ap = stats[0]['fps_ap']
+                fps_ap = stats[0]['fps_ap'] # Use the average of the fps_curve
+                fps_ap_mm = stats[0]['fps_ap_mm'] # Use the matmul distance based weight matrix
                 fps_curve = stats[0]['fps_curve']
+                ontology_ap = stats[0]['fps_curve'][0] # Use the min distance based weight matrix. The ontology based metric
                 draw_fps_curve(epoch, fps_curve, args.exp_dir)
                 
-                logging_info(rank, "mAP %s, mAUC %s, acc %s, fps_ap %s" % (mAP, mAUC, acc, fps_ap))
+                logging_info(rank, "mAP %s, mAUC %s, acc %s, fps_curve_average %s, ontology_ap %s" % (mAP, mAUC, acc, fps_ap, ontology_ap))
                 
-                val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc, "fps_ap": fps_ap}
+                val_info = {"val-mAP": mAP, "val-mAUC": mAUC, "val-acc":acc, "fps_curve_average": fps_ap, "fps_ap_mm": fps_ap_mm, "ontology_ap": ontology_ap}
                 
                 for k in val_info.keys():
                     print(k, val_info[k])
