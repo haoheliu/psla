@@ -12,3 +12,4 @@ PROJECT="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla&/mnt/fast/nobacku
 cd /mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_$IDENTIFIER/egs/audioset
 
 sh exp18_asb_wl.sh 1.3
+sh exp19_asb_wl_no_bce.sh 1.3
