@@ -155,6 +155,9 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
 
             audio_output, score_pred, energy_score = audio_model(audio_input)
 
+            # if(torch.sum(torch.isnan(audio_output) >= 1) or torch.sum(torch.isinf(audio_output) >= 1)):
+            #     import ipdb; ipdb.set_trace()
+                
             if isinstance(loss_fn, torch.nn.CrossEntropyLoss):
                 loss = loss_fn(audio_output, torch.argmax(labels.long(), axis=1))
             else:
@@ -182,7 +185,8 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
                 zero_loss = torch.mean(score_pred[id][score_mask[id]])
                 if(torch.isnan(zero_loss).item()):
                     continue
-                if(args.preserve_ratio < 1.0):
+                # if(args.preserve_ratio < 1.0):
+                if(zero_loss > args.apply_zero_loss_threshold * args.preserve_ratio):
                     loss = loss + args.lambda_zero_loss * zero_loss / score_pred.size(0) # [bs, length, 1]
                 if(zero_loss_final is None):
                     zero_loss_final = zero_loss / score_pred.size(0)
