@@ -144,6 +144,7 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
             audio_input = audio_input.to(device, non_blocking=True)
             # waveform = waveform.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
+            
             # If you want to measure the mean and std of the dataset
             # global DATA
             # if(DATA is None):

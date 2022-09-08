@@ -502,6 +502,70 @@ class DilatedConv1dMaxPoolChLinearSpecNormNewAlgo(AdaSTFT):
     
         return mean_feature, max_pool_feature, mean_pos_enc
 
+class Proposed(AdaSTFT):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std)
+        self.feature_channels=3
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
+
+    def forward(self, x):
+        ret = {}
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(self.denormalize(x).exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        
+        # Normalize the socre value
+        score, _ = self.score_norm(score, self.output_seq_length)
+        mean_feature, max_pool_feature, mean_pos_enc = self.select_feature_fast(self.denormalize(x).exp(), score, total_length=self.output_seq_length)
+        
+        mean_feature = self.normalize(torch.log(mean_feature + EPS))
+        max_pool_feature = self.normalize(torch.log(max_pool_feature + EPS))
+        
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        ret['emb'] = mean_pos_enc
+        ret['feature'] = torch.cat([mean_feature.unsqueeze(1), max_pool_feature.unsqueeze(1), mean_pos_enc.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=max_pool_feature
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def select_feature_fast(self, feature, score, total_length):
+        weight = self.calculate_weight(score, feature, total_length=total_length)
+
+        # New method
+        mean_feature = torch.matmul(weight.permute(0,2,1), feature)
+        max_pool_feature = self.calculate_scatter_maxpool_odd_even_lines(weight, feature, out_len=self.output_seq_length)
+        mean_pos_enc = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        return mean_feature, max_pool_feature, mean_pos_enc
+
 # Changing the step size
 class NeuralSamplerUniformPool(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
@@ -582,7 +646,6 @@ class NeuralSamplerUniformPool(nn.Module):
             plt.savefig(os.path.join(path, "%s.png" % i))
             plt.close()
             
-
 class BaselineAdaAvgMaxPool(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(BaselineAdaAvgMaxPool, self).__init__()

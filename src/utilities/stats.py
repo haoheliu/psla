@@ -50,7 +50,9 @@ def calculate_stats(output, target, args):
         
     # Class-wise statistics
     for k in range(classes_num):
-
+        if(np.sum(target[:, k]) == 0): 
+            continue
+        
         # Average precision
         avg_precision = metrics.average_precision_score(
             target[:, k], output[:, k], average=None)
