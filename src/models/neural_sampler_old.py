@@ -2071,9 +2071,9 @@ class NewAlgoLSTMLayerNormIntpPlusEnergyv2(nn.Module):
 class NewAlgoDilatedConv1dMaxPoolScaleChIntp(nn.Module):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
         super(NewAlgoDilatedConv1dMaxPoolScaleChIntp, self).__init__()
-        self.input_dim=128; self.mean=mean; self.std=std
+        self.input_dim=8; self.mean=mean; self.std=std
         self.latent_dim=64
-        self.feature_dim=128
+        self.feature_dim=8
         self.num_layers=2
         self.feature_channels=3
         self.preserv_ratio=preserve_ratio
@@ -2104,9 +2104,10 @@ class NewAlgoDilatedConv1dMaxPoolScaleChIntp(nn.Module):
         magnitude = torch.sum(((x*self.std)+self.mean).exp(), dim=2, keepdim=True)
         energy = magnitude/torch.max(magnitude)
         
-        pooled = self.pool(x)
-        score = torch.sigmoid(self.model(pooled.permute(0,2,1)).permute(0,2,1))
-        score = self.interpolate(score.permute(0,2,1)).permute(0,2,1)
+        # pooled = self.pool(x)
+        # score = torch.sigmoid(self.model(pooled.permute(0,2,1)).permute(0,2,1))
+        # score = self.interpolate(score.permute(0,2,1)).permute(0,2,1)
+        score = torch.rand((x.size(0), x.size(1), 1))
         
         ret = self.select_feature_fast(x, score, total_length=self.output_seq_length)
         ret['x']=x
@@ -2239,6 +2240,7 @@ class NewAlgoDilatedConv1dMaxPoolScaleChIntp(nn.Module):
     def select_feature_fast(self, feature, score, total_length):
         ret = {}
         
+        import ipdb; ipdb.set_trace()
         # Normalize the socre value
         score, total_length = self.score_norm(score, total_length)
 
@@ -2860,9 +2862,9 @@ class DoNothing(nn.Module):
             plt.close()
 
 def test_sampler(sampler, data=None):
-    input_tdim = 1056
+    input_tdim = 10
     sampler = sampler(input_seq_length=input_tdim, preserve_ratio=0.5)
-    if(data is None): test_input = torch.rand([3, input_tdim, 128])
+    if(data is None): test_input = torch.rand([1, input_tdim, 8])
     else: test_input = data
     ret =sampler(test_input)
     assert "score" in ret.keys()
@@ -2923,7 +2925,7 @@ def test_feature_single():
 # YZxq2_xOLT8o_0
 if __name__ == "__main__":
     from HigherModels import *
-    from neural_sampler import *
+    from neural_sampler_old import *
     from pooling import Pooling_layer
     from transformerencoder.model import TextEncoder
     import logging
@@ -2937,12 +2939,11 @@ if __name__ == "__main__":
     format="%(asctime)s - %(levelname)s: %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
     )
-    data = torch.rand([3, 1056, 128])
     # test_feature_single()
     # test_select_feature()
     # test_sampler(FrameLSTM)
     
-    out1 = test_sampler(NSDilatedConv1dMaxPool, data=data)
+    out1 = test_sampler(NewAlgoDilatedConv1dMaxPoolScaleChIntp)
     
     import ipdb; ipdb.set_trace()
     

@@ -25,7 +25,7 @@ Environment = PYTHONIOENCODING=UTF-8
 +GPUMem = 8000
 # -------------------------------------
 # Requirements for the Job
-requirements = (machine!="aisurrey02.surrey.ac.uk") && (machine!="aisurrey01.surrey.ac.uk") && (machine!="aisurrey08.surrey.ac.uk") && (machine!="nain.eps.surrey.ac.uk") && (CUDADeviceName == "GeForce RTX 2080 Ti") 
+requirements = (machine!="nain.eps.surrey.ac.uk") && (CUDADeviceName == "GeForce RTX 2080 Ti") 
 
 # --------------------------------------
 # Resources

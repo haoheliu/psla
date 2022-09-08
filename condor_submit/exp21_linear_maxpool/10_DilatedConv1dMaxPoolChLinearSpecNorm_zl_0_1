@@ -25,15 +25,15 @@ Environment = PYTHONIOENCODING=UTF-8
 +GPUMem = 8000
 # -------------------------------------
 # Requirements for the Job
-requirements = (machine!="nain.eps.surrey.ac.uk") && (CUDADeviceName == "GeForce RTX 2080 Ti") 
+requirements = (machine!="nain.eps.surrey.ac.uk") && (CUDADeviceName == "GeForce RTX 2080 Ti") || (CUDADeviceName == "GeForce RTX 3090")
 
 # --------------------------------------
 # Resources
-request_GPUs     = 1
+request_GPUs     = 3
 request_CPUs     = 1
-request_memory = 32G
+request_memory = 64G
 # -----------------------------------
 # Queue commands
 # -----------------------------------
-queue 1 type in DoNothing
+queue 1 type in DilatedConv1dMaxPoolChLinearSpecNorm
 # -----------------------------------

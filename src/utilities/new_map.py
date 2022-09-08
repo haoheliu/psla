@@ -264,6 +264,7 @@ def build_ontology_fps_sample_weight_min(target, weight, class_idx):
 def build_weight(target, weight):
     ret = {}
     path = "ontology_weight_%s.pkl" % os.getpid()
+    # path = "ontology_weight.pkl"
     if(not os.path.exists(path)):
         print("Build ontology based metric weight")
         logging.info("Build ontology based metric weight")
@@ -292,6 +293,29 @@ def ontology_mean_average_precision(target, clipwise_output, weight):
         ret_fps_ap[threshold] = np.array(fps_ap)
     return ret_fps_ap
 
+def ontology_mean_average_precision_old(target, clipwise_output, weight):
+    ontology_weight = build_weight(target, weight)
+    ret_ap = {}
+    ret_fps_ap = {}
+    for threshold in tqdm(np.linspace(0, int(np.max(weight)), int(np.max(weight))+1)):
+        ap = []
+        fps_ap=[]
+        for i in range(target.shape[1]):
+            fps_weight = ontology_weight[threshold][i]
+            ap.append(
+                _average_precision(
+                    target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=None
+                )
+            )
+            fps_ap.append(
+                _average_precision(
+                    target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=fps_weight
+                )
+            )   
+        ret_fps_ap[threshold] = np.array(fps_ap)
+        ret_ap[threshold] = np.array(ap)
+    return ret_ap, ret_fps_ap
+
 def test():
     """Forward evaluation data and calculate statistics.
 
@@ -302,6 +326,8 @@ def test():
         statistics: dict,
             {'average_precision': (classes_num,), 'auc': (classes_num,)}
     """
+    from new_map_matmul import mean_average_precision
+    
     MODEL_OUTPUT="/mnt/fast/nobackup/scratch4weeks/hl01486/dcase2022/model_outputs/panns.pkl"
     # MODEL_OUTPUT="/mnt/fast/nobackup/scratch4weeks/hl01486/dcase2022/model_outputs/ast_0.456.pkl"
     output_dict = load_pickle(
@@ -314,18 +340,68 @@ def test():
     clipwise_output = output_dict["clipwise_output"]  # (audios_num, classes_num)
     target = output_dict["target"]  # (audios_num, classes_num)
     weight = initialize_weight(graph_weight_path="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/egs/audioset/undirected_graph_connectivity_no_root.npy")
-    ap, fps_ap = ontology_mean_average_precision(target, clipwise_output, weight)
-    import ipdb; ipdb.set_trace()
+    ap, fps_ap = ontology_mean_average_precision_old(target, clipwise_output, weight)
     ap_curve = [np.mean(ap[k]) for k in ap.keys()]
     average_ontology_ap = np.mean(ap_curve)
     fps_curve = [np.mean(fps_ap[k]) for k in fps_ap.keys()]
-    print("fps_curve", fps_curve)
     draw_fps_curve(epoch=10, fps_curve=fps_curve, exp_dir=".")
     average_ontology_fps_ap = np.mean(fps_curve)
     print(average_ontology_ap, average_ontology_fps_ap)
     auc = metrics.roc_auc_score(target, clipwise_output, average=None)
     statistics = {"ap": ap,"fps_ap": fps_ap, "auc": auc}
     return statistics
+
+def remove_labels(target, ratio=0.0):
+    chance = np.random.rand(*target.shape)
+    mask = ~(chance < ratio)
+    return target * mask
+
+def test_robust(remove_labels_ratio = 0.0):
+    """Forward evaluation data and calculate statistics.
+
+    Args:
+        data_loader: object
+
+    Returns:
+        statistics: dict,
+            {'average_precision': (classes_num,), 'auc': (classes_num,)}
+    """
+    from new_map_matmul import mean_average_precision
+    
+    MODEL_OUTPUT="/mnt/fast/nobackup/scratch4weeks/hl01486/dcase2022/model_outputs/panns.pkl"
+    # MODEL_OUTPUT="/mnt/fast/nobackup/scratch4weeks/hl01486/dcase2022/model_outputs/ast_0.456.pkl"
+    output_dict = load_pickle(
+        MODEL_OUTPUT
+    )
+    
+    index = np.sum(output_dict["target"], axis=1) != 0
+    for k in output_dict.keys():
+        output_dict[k] = output_dict[k][index]
+    clipwise_output = output_dict["clipwise_output"]  # (audios_num, classes_num)
+    target = output_dict["target"]  # (audios_num, classes_num)
+    target = remove_labels(target, ratio = remove_labels_ratio)
+    weight = initialize_weight(graph_weight_path="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/egs/audioset/undirected_graph_connectivity_no_root.npy")
+    
+    ap, fps_ap = ontology_mean_average_precision_old(target, clipwise_output, weight)
+    
+    ap_curve = [np.mean(ap[k]) for k in ap.keys()]
+    average_ontology_ap = np.mean(ap_curve)
+    
+    fps_curve = [np.mean(fps_ap[k]) for k in fps_ap.keys()]
+    average_ontology_fps_ap = np.mean(fps_curve)
+    
+    auc = metrics.roc_auc_score(target, clipwise_output, average=None)
+    
+    statistics = {"ontology_ap": fps_curve[0],"average_ontology_ap":ap_curve[0], "average_ontology_fps_ap":average_ontology_fps_ap, "auc": np.mean(auc)}
+    return statistics
+
+def robustness():
+    ret = {}
+    for i in np.linspace(0.0,0.8, 50):
+        result = test_robust(i)
+        print(result)
+        ret[i] = result
+    return ret
 
 def draw_fps_curve(epoch, fps_curve, exp_dir):
     import matplotlib.pyplot as plt
@@ -338,4 +414,13 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import torch
 
-    res = test()
+    res = robustness()
+    save_pickle(res, fname="robustness_test_50.pkl")
+    
+    # content = "ratio, ontology_ap, average_ontology_ap, average_ontology_fps_ap, auc\n"
+    # res = load_pickle("robustness_test.pkl")
+    # for k in res.keys():
+    #     content += "%s,%s,%s,%s,%s\n" % (k, res[k]['ontology_ap'], res[k]["average_ontology_ap"], res[k]["average_ontology_fps_ap"], res[k]['auc'])
+    # print(content)
+    # import ipdb; ipdb.set_trace()
+    
