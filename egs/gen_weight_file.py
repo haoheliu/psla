@@ -14,7 +14,7 @@ import numpy as np
 import sys, os, csv
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("--dataset", type=str, default="audioset", help="training optimizer", choices=["audioset", "fsd50k"])
+parser.add_argument("--dataset", type=str, default="audioset", help="training optimizer", choices=["audioset", "fsd50k", "nsynth_inst","nsynth_pitch","speechcommand"])
 parser.add_argument("--label_indices_path", type=str, default="./class_labels_indices.csv", help="the label vocabulary file.")
 parser.add_argument("--datafile_path", type=str, default='./datafiles/balanced_train_data.json', help="the path of data json file")
 
@@ -33,7 +33,17 @@ if __name__ == '__main__':
     data_path = args.datafile_path
 
     index_dict = make_index_dict(args.label_indices_path)
-    num_class = 527 if args.dataset == 'audioset' else 200
+    if("audioset" in args.dataset):
+        num_class = 527
+    elif("fsd" in args.dataset):
+        num_class = 200
+    elif("speechcommand" in args.dataset):
+        num_class = 35
+    elif("nsynth_inst" in args.dataset):
+        num_class = 11
+    elif("nsynth_pitch" in args.dataset):
+        num_class = 128
+        
     label_count = np.zeros(num_class)
 
     with open(data_path, 'r', encoding='utf8')as fp:

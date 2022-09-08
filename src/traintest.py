@@ -93,14 +93,13 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
         args.warmup=False
         
     # dataset specific settings
-    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=args.lr_patience, verbose=True)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(args.lrscheduler_start, 1000, 5)), gamma=args.lrscheduler_decay, last_epoch=epoch - 1)
-    # lambda1 = lambda epoch: 0.95 ** (epoch-args.lrscheduler_start) if(epoch > args.lrscheduler_start) else 1.0
-    # lambda2 = lambda epoch: 0.8 ** (epoch-args.lrscheduler_start) if(epoch > args.lrscheduler_start) else 1.0
-    # lambda1 = lambda epoch: 0.95 ** epoch if(epoch > args.lrscheduler_start) else epoch
-    # lambda2 = lambda epoch: 0.85 ** epoch if(epoch > args.lrscheduler_start) else epoch
-    # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=[lambda1, lambda2], last_epoch=epoch - 1, verbose=True)
-
+    if(args.dataset == "speechcommand"):
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(5, 26)), gamma=0.85, last_epoch=epoch - 1)
+    elif(args.dataset == "nsynth_inst"):
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(args.lrscheduler_start, 1000, 5)), gamma=args.lrscheduler_decay, last_epoch=epoch - 1)
+    else:
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(args.lrscheduler_start, 1000, 5)), gamma=args.lrscheduler_decay, last_epoch=epoch - 1)
+        
     main_metrics = args.metrics
     if args.loss == 'BCE':
         loss_fn = nn.BCELoss(reduction="none")
@@ -127,6 +126,20 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
         logging_info(rank, "current #epochs=%s, #steps=%s" % (epoch, global_step))
         # print(os.getpid(), "ready to engage")
         for i, (audio_input, labels, fnames) in enumerate(train_loader):
+            # if(i % 10 == 0):
+            #     import matplotlib.pyplot as plt
+            #     for j in tqdm(range(audio_input.size(0))):
+            #         if(j>5): break
+            #         plt.imshow(audio_input[j].detach().cpu().numpy())
+            #         plt.title(str(torch.where(labels[j] > 0)) + fnames[j])
+            #         plt.savefig("%s_%s.png" % (j, datetime.datetime.now()))
+            
+            # res = []
+            # for j in range(audio_input.size(0)):
+            #     target = torch.where(labels[j] > 0)[0].item()
+            #     res.append(target)
+            # print(set(res))
+            
             B = audio_input.size(0)
             audio_input = audio_input.to(device, non_blocking=True)
             # waveform = waveform.to(device, non_blocking=True)

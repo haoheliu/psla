@@ -148,10 +148,13 @@ def test_model():
     from thop import profile
 
     # model = MBNet(pretrain=False)
-    model = EffNetAttention(pretrain=False, b=0, head_num=0, sampler=DoNothing, preserve_ratio=0.25, use_leaf=True) # 2.688G 717.103K
+    model = EffNetAttention(pretrain=True, b=2, head_num=4, sampler=DoNothing, preserve_ratio=0.25) # 2.688G 717.103K
+    
+    print('Total parameter number is : {:.3f} million'.format(sum(p.numel() for p in model.parameters()) / 1e6))
     
     test_input = torch.rand([10, input_tdim, 128])
     test_waveform = torch.rand([10, 1, 160000])
+    
     flops, params = profile(model, inputs=(test_input, test_waveform))
     flops, params = clever_format([flops, params], "%.3f")
 

@@ -25,23 +25,29 @@ def calculate_stats(output, target, args):
     """
     classes_num = target.shape[-1]
     stats = []
-    
-    fps_ap = ontology_mean_average_precision(target, output, np.load(args.graph_weight_path))
-    
-    # ap_curve = [np.mean(ap[k]) for k in ap.keys()]
-    # average_ontology_ap = np.mean(ap_curve)
-    fps_curve = [np.mean(fps_ap[k]) for k in fps_ap.keys()]
-    average_ontology_fps_ap = np.mean(fps_curve)
-    
-    logging.info("Mute based method: fps_ap %s" % ( average_ontology_fps_ap))
-    print("Mute based method: fps_ap %s" % ( average_ontology_fps_ap))
-    
-    ap_mm, fps_ap_mm = mean_average_precision(target, output, args.graph_weight_path)
-    average_ontology_ap_mm = np.mean(ap_mm['result'])
-    average_ontology_fps_ap_mm = np.mean(fps_ap_mm['result'])
-    
-    print("MM based method: ap %s, fps_ap %s" % (average_ontology_ap_mm, average_ontology_fps_ap_mm))
-
+    if("fsd50k" in args.dataset or "audioset" in args.dataset):
+        fps_ap = ontology_mean_average_precision(target, output, np.load(args.graph_weight_path))
+        
+        # ap_curve = [np.mean(ap[k]) for k in ap.keys()]
+        # average_ontology_ap = np.mean(ap_curve)
+        fps_curve = [np.mean(fps_ap[k]) for k in fps_ap.keys()]
+        average_ontology_fps_ap = np.mean(fps_curve)
+        
+        logging.info("Mute based method: fps_ap %s" % ( average_ontology_fps_ap))
+        print("Mute based method: fps_ap %s" % ( average_ontology_fps_ap))
+        
+        ap_mm, fps_ap_mm = mean_average_precision(target, output, args.graph_weight_path)
+        average_ontology_ap_mm = np.mean(ap_mm['result'])
+        average_ontology_fps_ap_mm = np.mean(fps_ap_mm['result'])
+        
+        print("MM based method: ap %s, fps_ap %s" % (average_ontology_ap_mm, average_ontology_fps_ap_mm))
+    else:
+        fps_ap = np.array([0.0])
+        fps_curve = np.array([0.0])
+        average_ontology_fps_ap = np.array([0.0])
+        average_ontology_ap_mm = np.array([0.0])
+        average_ontology_fps_ap_mm = np.array([0.0])
+        
     # Class-wise statistics
     for k in range(classes_num):
 
@@ -79,7 +85,6 @@ def calculate_stats(output, target, args):
                 "fps_ap": average_ontology_fps_ap,
                 "fps_raw": fps_ap,
                 "fps_curve": fps_curve,
-                
                 "ap_mm": average_ontology_ap_mm, 
                 "fps_ap_mm": average_ontology_fps_ap_mm, 
         }

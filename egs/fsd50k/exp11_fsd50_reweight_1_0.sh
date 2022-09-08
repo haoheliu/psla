@@ -67,7 +67,7 @@ mkdir -p $exp_dir
 python ../../src/run.py --data-train $trpath --data-val ./datafiles/fsd50k_val_full.json --data-eval ./datafiles/fsd50k_eval_full.json \
 --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 8 --label-csv ./class_labels_indices.csv \
 --n_class 200 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
---model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} --dataset ${dataset} \
 --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} \
 --dataset_mean -13.9325 --dataset_std 3.7020 --target_length ${target_length} --noise False --learn_pos_emb ${learn_pos_emb} --lambda_zero_loss ${lambda_zero_loss} \
 --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 --note ${note} \
@@ -103,7 +103,7 @@ mkdir -p $exp_dir
 python ../../src/run.py --data-train $trpath --data-val ./datafiles/fsd50k_val_full.json --data-eval ./datafiles/fsd50k_eval_full.json \
 --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 8 --label-csv ./class_labels_indices.csv \
 --n_class 200 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr \
---model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} \
+--model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} --dataset ${dataset} \
 --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} \
 --dataset_mean -13.9325 --dataset_std 3.7020 --target_length ${target_length} --noise False --learn_pos_emb ${learn_pos_emb} --lambda_zero_loss ${lambda_zero_loss} \
 --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 --note ${note} \

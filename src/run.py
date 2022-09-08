@@ -97,7 +97,7 @@ def main(argpath=None):
 
         # model args
         parser.add_argument("--model", type=str, default="efficientnet", help="audio model architecture", choices=["efficientnet", "resnet", "mbnet"])
-        parser.add_argument("--dataset", type=str, default="audioset", help="the dataset used", choices=["audioset", "esc50", "speechcommands","fsd50k","audiosetbalanced"])
+        parser.add_argument("--dataset", type=str, default="audioset", help="the dataset used", choices=["audioset", "esc50", "speechcommands","fsd50k","audiosetbalanced", "nsynth_inst","nsynth_pitch"])
         parser.add_argument("--graph_weight_path", type=str, default="")
 
         parser.add_argument("--dataset_mean", type=float, default=-4.6476, help="the dataset mean, used for input normalization")
@@ -272,14 +272,21 @@ def run(rank, n_gpus, args):
     if(n_gpus > 1):
         audio_model = DDP(audio_model, device_ids=[rank])
     
-    # if you want to use a pretrained model for fine-tuning, uncomment here.
-    if("audioset" not in args.dataset):
-        # TODO we might have error here
-        print("Reloading model trained on audioset, mAP 0.4329")
-        logging.info("Reloading model trained on audioset, mAP 0.4329")
-        device = torch.device("cuda:%s" % rank if torch.cuda.is_available() else "cpu")
-        sd = torch.load('../../pretrained_models/as_mdl_0_wa.pth', map_location=device)
-        audio_model.module.load_state_dict(sd, strict=False)
+    # # if you want to use a pretrained model for fine-tuning, uncomment here.
+    # if("audioset" not in args.dataset):
+    #     # TODO we might have error here
+    #     print("Reloading model trained on audioset, mAP 0.4329")
+    #     logging.info("Reloading model trained on audioset, mAP 0.4329")
+    #     device = torch.device("cuda:%s" % rank if torch.cuda.is_available() else "cpu")
+    #     sd = torch.load('../../pretrained_models/as_mdl_0_wa.pth', map_location=device)
+    #     state_dict = {}
+    #     new_state_dict = audio_model.state_dict()
+    #     for k in new_state_dict.keys():
+    #         if(k in sd.keys() and new_state_dict[k].size() == sd[k].size()):
+    #             state_dict[k] = sd[k]
+    #         else:
+    #             print("Fail to reload", k)
+    #     audio_model.load_state_dict(state_dict, strict=False)
 
     if(rank==0):
         logging.info("\nCreating experiment directory: %s" % args.exp_dir)
