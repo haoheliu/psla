@@ -40,7 +40,7 @@ wa_end=35
 target_length=98
 batch_size=128
 
-lambda_zero_loss=0.001
+lambda_zero_loss=0.1
 apply_zero_loss_threshold=0.0
 
 weight_func=calculate_class_weight_min

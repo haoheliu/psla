@@ -52,6 +52,7 @@ def seed_torch(seed=1029):
 
 def adaptive_batchsize(args):
     args.batch_size = int(22 * (1056/args.target_length))
+        
     if(args.preserve_ratio <= 0.1):
         args.batch_size *= 6
     elif(args.preserve_ratio > 0.1 and args.preserve_ratio <= 0.25):
@@ -61,6 +62,10 @@ def adaptive_batchsize(args):
     elif(args.preserve_ratio <= 0.75):
         args.batch_size *= 1.25
     args.batch_size = int(args.batch_size)
+    
+    if(args.batch_size > 256):
+        args.batch_size = 256
+        
     print("Batchsize: %s" % args.batch_size)
     logging.info("Batchsize: %s" % args.batch_size)
     return args
@@ -156,6 +161,11 @@ def main(argpath=None):
     seed_everything(int(args.seed)) # TODO put it where?
     seed_torch(int(args.seed)) # TODO put it where?
     
+    if("audioset" in args.dataset or "fsd50k" in args.dataset):
+        args.metrics="mAP"
+    else:
+        args.metrics="acc"
+        
     """Assume Single Node Multi GPUs Training Only"""
     n_gpus = torch.cuda.device_count()
     print("Class numbers", args.n_class)
@@ -318,20 +328,26 @@ def run(rank, n_gpus, args):
             stats, _ = validate(rank, n_gpus, audio_model, val_loader, args, 'best_single_valid_set')
             val_mAP = np.mean([stat['AP'] for stat in stats])
             val_mAUC = np.mean([stat['auc'] for stat in stats])
+            val_acc = np.mean([stat['acc'] for stat in stats])
             logging.info("mAP: {:.6f}".format(val_mAP))
             logging.info("AUC: {:.6f}".format(val_mAUC))
+            logging.info("acc: {:.6f}".format(val_acc))
             info["mAP/val_single"]=val_mAP
             info["AUC/val_single"]=val_mAUC
+            info["acc/val_single"]=val_acc
             logging.info('---------------evaluate best single model on the evaluation set---------------')
             print("---------------evaluate best single model on the evaluation set---------------")
             stats, _ = validate(rank, n_gpus, audio_model, eval_loader, args, 'best_single_eval_set', eval_target=True)
             eval_mAP = np.mean([stat['AP'] for stat in stats])
             eval_mAUC = np.mean([stat['auc'] for stat in stats])
+            eval_acc = np.mean([stat['acc'] for stat in stats])
             logging.info("mAP: {:.6f}".format(eval_mAP))
             logging.info("AUC: {:.6f}".format(eval_mAUC))
+            logging.info("acc: {:.6f}".format(eval_acc))
             info["mAP/eval_single"]=eval_mAP
             info["AUC/eval_single"]=eval_mAUC
-            np.savetxt(args.exp_dir + '/best_single_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC])
+            info["acc/eval_single"]=eval_acc
+            np.savetxt(args.exp_dir + '/best_single_result.csv', [val_mAP, val_mAUC, val_acc, eval_mAP, eval_mAUC, eval_acc])
 
             # evaluate weight average model
             sd = torch.load(args.exp_dir + '/models/audio_model_wa.pth', map_location=device)
@@ -342,20 +358,26 @@ def run(rank, n_gpus, args):
             stats, _ = validate(rank, n_gpus, audio_model, val_loader, args, 'wa_valid_set')
             val_mAP = np.mean([stat['AP'] for stat in stats])
             val_mAUC = np.mean([stat['auc'] for stat in stats])
+            val_acc = np.mean([stat['acc'] for stat in stats])
             logging.info("mAP: {:.6f}".format(val_mAP))
             logging.info("AUC: {:.6f}".format(val_mAUC))
+            logging.info("acc: {:.6f}".format(val_acc))
             info["mAP/val_wa"]=val_mAP
             info["AUC/val_wa"]=val_mAUC
+            info["acc/val_wa"]=val_acc
             logging.info('---------------evaluate weight averages model on the evaluation set---------------')
             print("---------------evaluate weight averages model on the evaluation set---------------")
             stats, _ = validate(rank, n_gpus, audio_model, eval_loader, args, 'wa_eval_set')
             eval_mAP = np.mean([stat['AP'] for stat in stats])
             eval_mAUC = np.mean([stat['auc'] for stat in stats])
+            eval_acc = np.mean([stat['acc'] for stat in stats])
             logging.info("mAP: {:.6f}".format(eval_mAP))
             logging.info("AUC: {:.6f}".format(eval_mAUC))
+            logging.info("acc: {:.6f}".format(eval_acc))
             info["mAP/eval_wa"]=eval_mAP
             info["AUC/eval_wa"]=eval_mAUC
-            np.savetxt(args.exp_dir + '/wa_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC])
+            info["acc/eval_wa"]=eval_acc
+            np.savetxt(args.exp_dir + '/wa_result.csv', [val_mAP, val_mAUC, val_acc, eval_mAP, eval_mAUC, eval_acc])
 
             # evaluate the ensemble results
             logging.info('---------------evaluate ensemble model on the validation set---------------')
@@ -364,10 +386,16 @@ def run(rank, n_gpus, args):
             result = np.loadtxt(args.exp_dir + '/result.csv', delimiter=',')
             val_mAP = result[-1, -3]
             val_mAUC = result[-1, -2]
-            logging.info("mAP: {:.6f}".format(val_mAP))
-            logging.info("AUC: {:.6f}".format(val_mAUC))
-            info["mAP/val_ensemble"]=val_mAP
-            info["AUC/val_ensemble"]=val_mAUC
+            if(args.metrics == "mAP"):
+                logging.info("mAP: {:.6f}".format(val_mAP))
+                logging.info("AUC: {:.6f}".format(val_mAUC))
+                info["mAP/val_ensemble"]=val_mAP
+                info["AUC/val_ensemble"]=val_mAUC
+            else:
+                logging.info("acc: {:.6f}".format(val_mAP))
+                logging.info("AUC: {:.6f}".format(val_mAUC))
+                info["acc/val_ensemble"]=val_mAP
+                info["AUC/val_ensemble"]=val_mAUC
             logging.info('---------------evaluate ensemble model on the evaluation set---------------')
             print("---------------evaluate ensemble model on the evaluation set---------------")
             # get the prediction of each checkpoint model
@@ -387,12 +415,16 @@ def run(rank, n_gpus, args):
             ensemble_predictions = ensemble_predictions / args.n_epochs
             stats = calculate_stats(ensemble_predictions, target, args)
             eval_mAP = np.mean([stat['AP'] for stat in stats])
+            eval_acc = np.mean([stat['acc'] for stat in stats])
             eval_mAUC = np.mean([stat['auc'] for stat in stats])
             logging.info("mAP: {:.6f}".format(eval_mAP))
             logging.info("AUC: {:.6f}".format(eval_mAUC))
+            logging.info("acc: {:.6f}".format(eval_acc))
             info["mAP/eval_ensemble"]=eval_mAP
             info["AUC/eval_ensemble"]=eval_mAUC
-            np.savetxt(args.exp_dir + '/ensemble_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC])
+            info["acc/eval_ensemble"]=eval_acc
+            
+            np.savetxt(args.exp_dir + '/ensemble_result.csv', [val_mAP, val_mAUC, eval_mAP, eval_mAUC, eval_acc])
 
         # if the dataset only has evaluation set (no validation set), e.g., AudioSet
         else:
