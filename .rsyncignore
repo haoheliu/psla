@@ -2,3 +2,9 @@ egs/audioset/exp
 egs/fsd50k/exp
 egs/audioset/wandb
 egs/fsd50k/wandb
+egs/nsynth_instrument/wandb
+egs/nsynth_instrument/exp
+egs/nsynth_pitch/wandb
+egs/nsynth_pitch/exp
+egs/speechcommands/wandb
+egs/speechcommands/exp

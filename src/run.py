@@ -65,7 +65,10 @@ def adaptive_batchsize(args):
     
     if(args.batch_size > 256):
         args.batch_size = 256
-        
+    
+    if(args.batch_size < 1):
+        args.batch_size = 1
+    
     print("Batchsize: %s" % args.batch_size)
     logging.info("Batchsize: %s" % args.batch_size)
     return args

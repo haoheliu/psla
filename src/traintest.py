@@ -94,7 +94,7 @@ def train(rank, n_gpus, audio_model, train_loader, test_loader, args):
         
     # dataset specific settings
     if(args.dataset == "speechcommands"):
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(5, 26)), gamma=0.85, last_epoch=epoch - 1)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(args.lrscheduler_start, 1000, 1)), gamma=args.lrscheduler_decay, last_epoch=epoch - 1)
     elif(args.dataset == "nsynth_inst"):
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(args.lrscheduler_start, 1000, 5)), gamma=args.lrscheduler_decay, last_epoch=epoch - 1)
     else:
