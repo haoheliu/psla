@@ -90,11 +90,11 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x).permute(1,0,2)
     
 class AdaSTFT(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(AdaSTFT,self).__init__()
-        self.input_dim=128; self.mean=mean; self.std=std
+        self.input_dim=n_mel_bins; self.mean=mean; self.std=std
         self.latent_dim=64
-        self.feature_dim=128
+        self.feature_dim=n_mel_bins
         self.num_layers=2
         
         self.preserv_ratio=preserve_ratio
@@ -279,6 +279,25 @@ class AdaSTFT(nn.Module):
         ####################################################################
         return score, total_length
     
+    
+    def update_weight(self, weight):
+        weight = weight.permute(0,2,1)
+        bs, gamma, m = weight.size()
+        for b in range(bs):
+            i,j,s = 0,0,0
+            while(i < gamma - 1 and j < m - 1):
+                if(weight[b,i,j] > 0): 
+                    s += weight[b,i,j]
+                    j += 1 
+                    continue
+                else:
+                    weight[b,i,j] = 1-s
+                    weight[b,i+1,j] -= weight[b,i,j]
+                    i += 1
+                    s = 0
+        return weight.permute(0,2,1)
+        
+    
     def calculate_weight(self, score, feature, total_length):
         # Monotonic Expansion
         cumsum_score = torch.cumsum(score, dim=1)
@@ -291,7 +310,7 @@ class AdaSTFT(nn.Module):
         # Get the masked weight
         weight = score.expand(feature.size(0), feature.size(1), total_length)
         weight = weight * mask
-
+        
         # Make the sum of each row to one
         weight_sum = torch.sum(weight, dim=1, keepdim=True)
         one_minus_weight_sum = 1-weight_sum
@@ -305,8 +324,8 @@ class AdaSTFT(nn.Module):
         return weight
 
 class DilatedConv1dMaxPoolCh_LinearSpec(AdaSTFT):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
-        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std)
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
         self.feature_channels=3
         from models.dilated_convolutions_1d.conv import DilatedConv
         self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
@@ -370,8 +389,8 @@ class DilatedConv1dMaxPoolCh_LinearSpec(AdaSTFT):
         return mean_feature, max_pool_feature, mean_pos_enc
 
 class DilatedConv1dMaxPoolChLinearSpecNorm(AdaSTFT):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
-        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std)
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
         self.feature_channels=3
         from models.dilated_convolutions_1d.conv import DilatedConv
         self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
@@ -436,8 +455,8 @@ class DilatedConv1dMaxPoolChLinearSpecNorm(AdaSTFT):
         return mean_feature, max_pool_feature, mean_pos_enc
 
 class DilatedConv1dMaxPoolChLinearSpecNormNewAlgo(AdaSTFT):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
-        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std)
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
         self.feature_channels=3
         from models.dilated_convolutions_1d.conv import DilatedConv
         self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
@@ -502,9 +521,73 @@ class DilatedConv1dMaxPoolChLinearSpecNormNewAlgo(AdaSTFT):
     
         return mean_feature, max_pool_feature, mean_pos_enc
 
+class ProposedSum(AdaSTFT):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
+        self.feature_channels=2
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
+
+    def forward(self, x):
+        ret = {}
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(self.denormalize(x).exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        
+        # Normalize the socre value
+        score, _ = self.score_norm(score, self.output_seq_length)
+        mean_feature, max_pool_feature, mean_pos_enc = self.select_feature_fast(self.denormalize(x).exp(), score, total_length=self.output_seq_length)
+        
+        mean_feature = self.normalize(torch.log(mean_feature + EPS))
+        max_pool_feature = self.normalize(torch.log(max_pool_feature + EPS))
+        
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        ret['emb'] = mean_pos_enc
+        ret['feature'] = torch.cat([(mean_feature.unsqueeze(1) + max_pool_feature.unsqueeze(1))/2, mean_pos_enc.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=max_pool_feature
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def select_feature_fast(self, feature, score, total_length):
+        weight = self.calculate_weight(score, feature, total_length=total_length)
+
+        # New method
+        mean_feature = torch.matmul(weight.permute(0,2,1), feature)
+        max_pool_feature = self.calculate_scatter_maxpool_odd_even_lines(weight, feature, out_len=self.output_seq_length)
+        mean_pos_enc = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        return mean_feature, max_pool_feature, mean_pos_enc
+
 class Proposed(AdaSTFT):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
-        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std)
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
         self.feature_channels=3
         from models.dilated_convolutions_1d.conv import DilatedConv
         self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
@@ -566,9 +649,180 @@ class Proposed(AdaSTFT):
         
         return mean_feature, max_pool_feature, mean_pos_enc
 
+class ProposedLarge(AdaSTFT):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
+        self.feature_channels=3
+        from models.dilated_convolutions_1d.conv import DilatedConvLarge
+        self.model = DilatedConvLarge(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
+
+    def forward(self, x):
+        ret = {}
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(self.denormalize(x).exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        
+        # Normalize the socre value
+        score, _ = self.score_norm(score, self.output_seq_length)
+        mean_feature, max_pool_feature, mean_pos_enc = self.select_feature_fast(self.denormalize(x).exp(), score, total_length=self.output_seq_length)
+        
+        mean_feature = self.normalize(torch.log(mean_feature + EPS))
+        max_pool_feature = self.normalize(torch.log(max_pool_feature + EPS))
+        
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        ret['emb'] = mean_pos_enc
+        ret['feature'] = torch.cat([mean_feature.unsqueeze(1), max_pool_feature.unsqueeze(1), mean_pos_enc.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=max_pool_feature
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def select_feature_fast(self, feature, score, total_length):
+        weight = self.calculate_weight(score, feature, total_length=total_length)
+
+        # New method
+        mean_feature = torch.matmul(weight.permute(0,2,1), feature)
+        max_pool_feature = self.calculate_scatter_maxpool_odd_even_lines(weight, feature, out_len=self.output_seq_length)
+        mean_pos_enc = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        return mean_feature, max_pool_feature, mean_pos_enc
+    
+class NNDilated(AdaSTFT):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
+        self.feature_channels=1
+        from models.dilated_convolutions_1d.conv import DilatedConv_128
+        self.model = DilatedConv_128(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
+
+    def forward(self, x):
+        ret = {}
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(self.denormalize(x).exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        # Normalize the socre value
+        feature = self.model(x.permute(0,2,1)).permute(0,2,1) + x
+        ret['feature'] = self.pooling(feature.permute(0,2,1)).permute(0,2,1).unsqueeze(1)
+        
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        ret['score']=ret['energy']
+        ret['score_loss'] = torch.tensor([0.0]).to(x.device)
+        
+        return ret
+
+    def visualize(self, ret):
+        x, y, score, energy = ret['x'], ret['feature'], ret['score'], ret['energy']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(411)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(412)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(413)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(414)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+            
+class NNBased(AdaSTFT):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
+        self.feature_channels=3
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
+
+    def forward(self, x):
+        ret = {}
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(self.denormalize(x).exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        
+        # Normalize the socre value
+        score, _ = self.score_norm(score, self.output_seq_length)
+        mean_feature, max_pool_feature, mean_pos_enc = self.select_feature_fast(self.denormalize(x).exp(), score, total_length=self.output_seq_length)
+        
+        mean_feature = self.normalize(torch.log(mean_feature + EPS))
+        max_pool_feature = self.normalize(torch.log(max_pool_feature + EPS))
+        
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        ret['emb'] = mean_pos_enc
+        ret['feature'] = torch.cat([mean_feature.unsqueeze(1), max_pool_feature.unsqueeze(1), mean_pos_enc.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=max_pool_feature
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def select_feature_fast(self, feature, score, total_length):
+        weight = self.calculate_weight(score, feature, total_length=total_length)
+
+        # New method
+        mean_feature = torch.matmul(weight.permute(0,2,1), feature)
+        max_pool_feature = self.calculate_scatter_maxpool_odd_even_lines(weight, feature, out_len=self.output_seq_length)
+        mean_pos_enc = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        return mean_feature, max_pool_feature, mean_pos_enc
+    
 # Changing the step size
 class NeuralSamplerUniformPool(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NeuralSamplerUniformPool, self).__init__()
         self.feature_channels=1
         self.mean = mean
@@ -647,7 +901,7 @@ class NeuralSamplerUniformPool(nn.Module):
             plt.close()
             
 class BaselineAdaAvgMaxPool(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(BaselineAdaAvgMaxPool, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -736,7 +990,7 @@ class BaselineAdaAvgMaxPool(nn.Module):
 
 # TODO
 class BaselineAdaAvgPool(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(BaselineAdaAvgPool, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -823,7 +1077,7 @@ class BaselineAdaAvgPool(nn.Module):
         return score, total_length
 
 class BaselineConstantScore(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(BaselineConstantScore, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -968,7 +1222,7 @@ class BaselineConstantScore(nn.Module):
         return ret
 
 class NewAlgoDilatedConv1d(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NewAlgoDilatedConv1d, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -1116,7 +1370,7 @@ class NewAlgoDilatedConv1dIntp(nn.Module):
     Args:
         nn (_type_): _description_
     """
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NewAlgoDilatedConv1dIntp, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -1274,7 +1528,7 @@ class NewAlgoDilatedConv1dIntp(nn.Module):
 
 # Previous version model
 class NewAlgoLSTMLayerNorm(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NewAlgoLSTMLayerNorm, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -1466,7 +1720,7 @@ class NewAlgoLSTMLayerNorm(nn.Module):
 
 
 class NewAlgoDilated(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NewAlgoDilated, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -1624,7 +1878,7 @@ class NewAlgoDilated(nn.Module):
 
 # Previous version model + Perform combination on the linear scale
 class NewAlgoDilatedLinear(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NewAlgoDilatedLinear, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -1791,7 +2045,7 @@ class NewAlgoDilatedLinear(nn.Module):
     
 # Maxpooling model + score normalization to one
 class NewAlgoLSTMLayerNormLinearMaxNormone(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NewAlgoLSTMLayerNormLinearMaxNormone, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -2032,7 +2286,7 @@ class NewAlgoLSTMLayerNormLinearMaxNormone(nn.Module):
 
 # Maxpooling model + score normalization to one + Dilated conv
 class NewAlgoDilatedLinearMaxNormone(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NewAlgoDilatedLinearMaxNormone, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -2243,7 +2497,7 @@ class NewAlgoDilatedLinearMaxNormone(nn.Module):
 
 # Linear scale model + Max pooling channel    
 class NewAlgoDilatedLinearMax(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NewAlgoDilatedLinearMax, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -2505,7 +2759,7 @@ class NewAlgoDilatedLinearMax(nn.Module):
         return tensor_list, max_pool_feature, pos_emb
 
 class NewAlgoDilatedConv1dMaxPoolScaleChIntp(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(NewAlgoDilatedConv1dMaxPoolScaleChIntp, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -2715,7 +2969,7 @@ class NewAlgoDilatedConv1dMaxPoolScaleChIntp(nn.Module):
     
 # Use large LSTM
 class FrameLSTM(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(FrameLSTM, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -2821,7 +3075,7 @@ class FrameLSTM(nn.Module):
 
 # Use large LSTM
 class MappingDNN(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(MappingDNN, self).__init__()
         self.input_dim=128; self.mean=mean; self.std=std
         self.latent_dim=64
@@ -2918,7 +3172,7 @@ class MappingDNN(nn.Module):
         return score, total_length
 
 class DoNothing(nn.Module):
-    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(DoNothing, self).__init__()
         self.mean = mean
         self.std = std
@@ -3079,7 +3333,7 @@ if __name__ == "__main__":
     # test_select_feature()
     # test_sampler(FrameLSTM)
     
-    # out1 = test_sampler(DilatedConv1dMaxPoolChLinearSpecNormNewAlgo, data=data)
-    model = AdaSTFT(input_seq_length=1056, preserve_ratio=0.5)
+    out1 = test_sampler(Proposed, data=data)
+    # model = AdaSTFT(input_seq_length=1056, preserve_ratio=0.5)
     
     

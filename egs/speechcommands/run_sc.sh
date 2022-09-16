@@ -33,7 +33,7 @@ fi
 
 dataset=speechcommands
 lr=2.5e-4
-hop_ms=10 # TODO
+
 epoch=60
 wa_start=31
 wa_end=60
@@ -57,6 +57,7 @@ seed=21195
 
 sampler=$1
 preserve_ratio=$2
+hop_ms=$3
 
 tr_data=./data/datafiles/speechcommand_train_data.json
 val_data=./data/datafiles/speechcommand_valid_data.json
@@ -72,5 +73,5 @@ python ../../src/run.py --data-train ${tr_data} --data-val ${val_data} --data-ev
 --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} --apply_zero_loss_threshold ${apply_zero_loss_threshold} \
 --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} \
 --dataset_mean -11.98 --dataset_std 4.85 --target_length ${target_length} --noise False --learn_pos_emb ${learn_pos_emb} --lambda_zero_loss ${lambda_zero_loss} \
---metrics mAP --warmup False --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.85 --note ${note} \
+--metrics acc --warmup False --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.85 --note ${note} \
 --alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} --val_interval 1

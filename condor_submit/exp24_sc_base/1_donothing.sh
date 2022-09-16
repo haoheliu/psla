@@ -11,4 +11,4 @@ PROJECT="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla&/mnt/fast/nobacku
 ######################## RUNNING ENTRY ########################
 cd /mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_$IDENTIFIER/egs/speechcommands
 
-sh run_sc.sh $1 1.0
+sh run_sc.sh $1 1.66667 6

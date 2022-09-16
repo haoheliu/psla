@@ -25,13 +25,13 @@ Environment = PYTHONIOENCODING=UTF-8
 +GPUMem = 8000
 # -------------------------------------
 # Requirements for the Job
-requirements = (machine!="nain.eps.surrey.ac.uk") && (CUDADeviceName == "GeForce RTX 2080 Ti") || (CUDADeviceName == "GeForce RTX 3090")
+requirements = (machine!="aisurrey09.surrey.ac.uk") && (machine!="nain.eps.surrey.ac.uk") && (CUDADeviceName == "GeForce RTX 2080 Ti") || (CUDADeviceName == "GeForce RTX 3090")
 
 # --------------------------------------
 # Resources
-request_GPUs     = 1
+request_GPUs     = 2
 request_CPUs     = 1
-request_memory = 32G
+request_memory = 64G
 # -----------------------------------
 # Queue commands
 # -----------------------------------

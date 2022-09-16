@@ -8,3 +8,5 @@ egs/nsynth_pitch/wandb
 egs/nsynth_pitch/exp
 egs/speechcommands/wandb
 egs/speechcommands/exp
+egs/esc50/wandb
+egs/esc50/exp

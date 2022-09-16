@@ -78,7 +78,7 @@ class MBNet(nn.Module):
         return out
 
 class EffNetAttention(nn.Module):
-    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False, use_leaf=False, mean=-7.4106, std=6.3097):
+    def __init__(self, label_dim=527, b=0, pretrain=True, head_num=4, input_seq_length=3000, sampler=None, preserve_ratio=0.1, alpha=1.0, learn_pos_emb=False, use_leaf=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
         super(EffNetAttention, self).__init__()
         self.middim = [1280, 1280, 1408, 1536, 1792, 2048, 2304, 2560]
         self.input_seq_length = input_seq_length
@@ -86,8 +86,7 @@ class EffNetAttention(nn.Module):
         self.learn_pos_emb = learn_pos_emb
         self.alpha = alpha
 
-        self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha, self.learn_pos_emb, mean, std)
-        
+        self.neural_sampler = sampler(input_seq_length, preserve_ratio, self.alpha, self.learn_pos_emb, mean, std, n_mel_bins)
         if pretrain == False:
             print('EfficientNet Model Trained from Scratch (ImageNet Pretraining NOT Used).')
             self.effnet = EfficientNet.from_name('efficientnet-b'+str(b), in_channels=self.neural_sampler.feature_channels)
@@ -121,7 +120,11 @@ class EffNetAttention(nn.Module):
         else:
             raise ValueError('Attention head must be integer >= 0, 0=mean pooling, 1=single-head attention, >1=multi-head attention.')
         
-        self.avgpool = nn.AvgPool2d((4, 1))
+        if(n_mel_bins < 128):
+            self.avgpool = nn.AdaptiveAvgPool2d((4, 1))
+        else:
+            self.avgpool = nn.AvgPool2d((4, 1))
+            
         self.effnet._fc = nn.Identity()
         self.batch_idx=0
         self.rank = None

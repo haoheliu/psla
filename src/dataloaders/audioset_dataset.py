@@ -137,26 +137,6 @@ class AudiosetDataset(Dataset):
         fbank = torchaudio.compliance.kaldi.fbank(waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
                                                   window_type='hanning', num_mel_bins=self.melbins, dither=0.0, frame_shift=self.hop_ms) # TODO
         pad_val = -15.7
-        # Wavegram
-        # fbank,_ = self.dsp.wav_to_wavegram(waveform.unsqueeze(1), 7)
-        # fbank = fbank[0,...].permute(1,0)
-        # self.norm_mean, self.norm_std = 1e-5, 0.01
-        # pad_val = 0.0
-        
-        # Wavegram2
-        # fbank = waveform.reshape(..., 128)
-        # pad_val = 0.0
-
-        # Wavegram3
-        # buffer = []
-        # for i in range(128):
-        #     buffer.append(waveform[:, i::128])
-        # min_len = min([each.size(1) for each in buffer])
-        # for i in range(len(buffer)):
-        #     buffer[i] = buffer[i][:, :min_len]
-        # fbank = torch.cat(buffer, dim=0).permute(1, 0)
-        # pad_val = 0.0
-        # End
 
         target_length = self.audio_conf.get('target_length')
         n_frames = fbank.shape[0]

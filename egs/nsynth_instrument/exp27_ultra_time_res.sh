@@ -32,12 +32,12 @@ else
 fi
 
 dataset=nsynth_inst
-lr=5e-4
+lr=1e-4
 
 lrscheduler_start=10
-epoch=30
-wa_start=16
-wa_end=30
+epoch=20
+wa_start=11
+wa_end=20
 target_length=400
 batch_size=128
 
@@ -50,7 +50,7 @@ alpha=1.0
 beta=0.0
 reweight_loss=False
 
-note=exp25_nsynth_inst
+note=exp27_nsynth_inst
 learn_pos_emb=False
 
 
@@ -73,33 +73,33 @@ python ../../src/run.py --data-train ${tr_data} --data-val ${val_data} --data-ev
 --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} \
 --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} \
 --dataset_mean -11.71 --dataset_std 5.38 --target_length ${target_length} --noise False --learn_pos_emb ${learn_pos_emb} --lambda_zero_loss ${lambda_zero_loss} \
---metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 --note ${note} \
+--metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.85 --note ${note} \
 --alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} --val_interval 1
 
-seed=1234
-date=$(date '+%Y-%m-%d_%H_%M_%S')
-exp_dir=./exp/${date}-${dataset}-${sampler}-posemb${learn_pos_emb}-alpha${alpha}-beta${beta}-hop${hop_ms}-${target_length}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-seed${seed}
-mkdir -p $exp_dir
+# seed=1234
+# date=$(date '+%Y-%m-%d_%H_%M_%S')
+# exp_dir=./exp/${date}-${dataset}-${sampler}-posemb${learn_pos_emb}-alpha${alpha}-beta${beta}-hop${hop_ms}-${target_length}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-seed${seed}
+# mkdir -p $exp_dir
 
-python ../../src/run.py --data-train ${tr_data} --data-val ${val_data} --data-eval ${eval_data} \
---exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 8 --label-csv ./data/nsynth_instrument_class_labels_indices.csv \
---n_class 11 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr --dataset ${dataset} \
---model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} \
---freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} \
---dataset_mean -11.71 --dataset_std 5.38 --target_length ${target_length} --noise False --learn_pos_emb ${learn_pos_emb} --lambda_zero_loss ${lambda_zero_loss} \
---metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 --note ${note} \
---alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} --val_interval 1
+# python ../../src/run.py --data-train ${tr_data} --data-val ${val_data} --data-eval ${eval_data} \
+# --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 8 --label-csv ./data/nsynth_instrument_class_labels_indices.csv \
+# --n_class 11 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr --dataset ${dataset} \
+# --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} \
+# --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} \
+# --dataset_mean -11.71 --dataset_std 5.38 --target_length ${target_length} --noise False --learn_pos_emb ${learn_pos_emb} --lambda_zero_loss ${lambda_zero_loss} \
+# --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.85 --note ${note} \
+# --alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} --val_interval 1
 
-seed=98736
-date=$(date '+%Y-%m-%d_%H_%M_%S')
-exp_dir=./exp/${date}-${dataset}-${sampler}-posemb${learn_pos_emb}-alpha${alpha}-beta${beta}-hop${hop_ms}-${target_length}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-seed${seed}
-mkdir -p $exp_dir
+# seed=98736
+# date=$(date '+%Y-%m-%d_%H_%M_%S')
+# exp_dir=./exp/${date}-${dataset}-${sampler}-posemb${learn_pos_emb}-alpha${alpha}-beta${beta}-hop${hop_ms}-${target_length}-${reweight_loss}-${preserve_ratio}-${model}-${eff_b}-${lr}-${subset}-impretrain-${impretrain}-fm${freqm}-tm${timem}-mix${mixup}-bal-${bal}-b${batch_size}-seed${seed}
+# mkdir -p $exp_dir
 
-python ../../src/run.py --data-train ${tr_data} --data-val ${val_data} --data-eval ${eval_data} \
---exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 8 --label-csv ./data/nsynth_instrument_class_labels_indices.csv \
---n_class 11 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr --dataset ${dataset} \
---model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} \
---freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} \
---dataset_mean -11.71 --dataset_std 5.38 --target_length ${target_length} --noise False --learn_pos_emb ${learn_pos_emb} --lambda_zero_loss ${lambda_zero_loss} \
---metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.5 --note ${note} \
---alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} --val_interval 1
+# python ../../src/run.py --data-train ${tr_data} --data-val ${val_data} --data-eval ${eval_data} \
+# --exp-dir $exp_dir --n-print-steps 50 --save_model True --num-workers 8 --label-csv ./data/nsynth_instrument_class_labels_indices.csv \
+# --n_class 11 --n-epochs ${epoch} --batch-size ${batch_size} --lr $lr --dataset ${dataset} \
+# --model ${model} --eff_b $eff_b --impretrain ${impretrain} --att_head ${att_head} --hop_ms ${hop_ms} --seed ${seed} \
+# --freqm $freqm --timem $timem --mixup ${mixup} --bal ${bal} --lr_patience 2 --reweight_loss ${reweight_loss} --weight_func ${weight_func} \
+# --dataset_mean -11.71 --dataset_std 5.38 --target_length ${target_length} --noise False --learn_pos_emb ${learn_pos_emb} --lambda_zero_loss ${lambda_zero_loss} \
+# --metrics mAP --warmup True --loss BCE --lrscheduler_start ${lrscheduler_start} --lrscheduler_decay 0.85 --note ${note} \
+# --alpha ${alpha} --beta ${beta} --graph_weight_path ${graph_weight_path} --wa True --wa_start ${wa_start} --wa_end ${wa_end} --sampler ${sampler} --preserve_ratio ${preserve_ratio} --val_interval 1

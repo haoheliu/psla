@@ -105,7 +105,7 @@ def main(argpath=None):
 
         # model args
         parser.add_argument("--model", type=str, default="efficientnet", help="audio model architecture", choices=["efficientnet", "resnet", "mbnet"])
-        parser.add_argument("--dataset", type=str, default="audioset", help="the dataset used", choices=["audioset", "esc50", "speechcommands","fsd50k","audiosetbalanced", "nsynth_inst","nsynth_pitch"])
+        parser.add_argument("--dataset", type=str, default="audioset", help="the dataset used", choices=["audioset", "esc50", "speechcommands","fsd50k","audiosetbalanced", "nsynth_inst", "nsynth_pitch"])
         parser.add_argument("--graph_weight_path", type=str, default="")
 
         parser.add_argument("--dataset_mean", type=float, default=-4.6476, help="the dataset mean, used for input normalization")
@@ -141,13 +141,14 @@ def main(argpath=None):
         parser.add_argument("--beta", type=float, default=1.0, help="The scaling factor to the graph weight")
         parser.add_argument("--val_interval", type=int, default=1)
         parser.add_argument("--seed", type=int, default=1234)
+        parser.add_argument("--n_mel_bins", type=int, default=128)
         parser.add_argument("--reweight_loss", type=ast.literal_eval, default=False)
         parser.add_argument("--non_weighted_loss", type=ast.literal_eval, default=True)
         
         parser.add_argument("--apply_zero_loss_threshold", type=float, default=0.5)
         parser.add_argument("--lambda_zero_loss", type=float, default=0.01)
         parser.add_argument("--learn_pos_emb", type=ast.literal_eval, default=False)
-        parser.add_argument("--hop_ms", type=int, default=10, help="The hop size when calculating STFT (ms)")
+        parser.add_argument("--hop_ms", type=float, default=10.0, help="The hop size when calculating STFT (ms)")
         
         parser.add_argument("--use_leaf", type=ast.literal_eval, default=False)
         
@@ -223,12 +224,12 @@ def run(rank, n_gpus, args):
     print("I am process %s, running on %s: starting (%s)" % (
             os.getpid(), os.uname()[1], time.asctime()))
 
-    audio_conf = {'num_mel_bins': 128, 'target_length': args.target_length, 'freqm': args.freqm,
+    audio_conf = {'num_mel_bins': int(args.n_mel_bins), 'target_length': args.target_length, 'freqm': args.freqm,
                 'timem': args.timem, 'mixup': args.mixup, 'dataset': args.dataset, 'mode': 'train',
                 'mean': args.dataset_mean, 'std': args.dataset_std,
                 'noise': False}
     
-    val_audio_conf = {'num_mel_bins': 128, 'target_length': args.target_length, 'freqm': 0, 'timem': 0, 'mixup': 0,
+    val_audio_conf = {'num_mel_bins': int(args.n_mel_bins), 'target_length': args.target_length, 'freqm': 0, 'timem': 0, 'mixup': 0,
                     'dataset': args.dataset, 'mode': 'evaluation', 'mean': args.dataset_mean,
                     'std': args.dataset_std, 'noise': False}
 
@@ -272,7 +273,7 @@ def run(rank, n_gpus, args):
                 batch_size=args.batch_size // 2, shuffle=False, num_workers=args.num_workers // 4, pin_memory=True, drop_last=True, worker_init_fn=seed_worker,generator=g)
 
     if args.model == 'efficientnet':
-        audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha, learn_pos_emb=args.learn_pos_emb, use_leaf=args.use_leaf,  mean=args.dataset_mean, std = args.dataset_std)
+        audio_model = models.EffNetAttention(label_dim=args.n_class, b=args.eff_b, pretrain=args.impretrain, head_num=args.att_head, input_seq_length=args.target_length,sampler=eval(args.sampler), preserve_ratio=args.preserve_ratio, alpha=args.alpha, learn_pos_emb=args.learn_pos_emb, use_leaf=args.use_leaf,  mean=args.dataset_mean, std = args.dataset_std, n_mel_bins=args.n_mel_bins)
     elif args.model == 'resnet':
         audio_model = models.ResNetAttention(label_dim=args.n_class, pretrain=args.impretrain)
     elif args.model == 'mbnet':
@@ -295,10 +296,17 @@ def run(rank, n_gpus, args):
     #     state_dict = {}
     #     new_state_dict = audio_model.state_dict()
     #     for k in new_state_dict.keys():
+    #         # Remove module in sd to be load
+    #         if("module."+k in sd.keys()):
+    #             sd[k] = sd["module."+k]
+    #             del sd["module."+k]
+                
+    #     for k in new_state_dict.keys():
     #         if(k in sd.keys() and new_state_dict[k].size() == sd[k].size()):
     #             state_dict[k] = sd[k]
     #         else:
     #             print("Fail to reload", k)
+                
     #     audio_model.load_state_dict(state_dict, strict=False)
 
     if(rank==0):
@@ -352,35 +360,36 @@ def run(rank, n_gpus, args):
             info["acc/eval_single"]=eval_acc
             np.savetxt(args.exp_dir + '/best_single_result.csv', [val_mAP, val_mAUC, val_acc, eval_mAP, eval_mAUC, eval_acc])
 
-            # evaluate weight average model
-            sd = torch.load(args.exp_dir + '/models/audio_model_wa.pth', map_location=device)
-            sd = sd["state_dict"] if (isinstance(sd, dict) and "state_dict" in sd.keys()) else sd
-            audio_model.load_state_dict(sd)
-            logging.info('---------------evaluate weight average model on the validation set---------------')
-            print("---------------evaluate weight average model on the validation set---------------")
-            stats, _ = validate(rank, n_gpus, audio_model, val_loader, args, 'wa_valid_set')
-            val_mAP = np.mean([stat['AP'] for stat in stats])
-            val_mAUC = np.mean([stat['auc'] for stat in stats])
-            val_acc = np.mean([stat['acc'] for stat in stats])
-            logging.info("mAP: {:.6f}".format(val_mAP))
-            logging.info("AUC: {:.6f}".format(val_mAUC))
-            logging.info("acc: {:.6f}".format(val_acc))
-            info["mAP/val_wa"]=val_mAP
-            info["AUC/val_wa"]=val_mAUC
-            info["acc/val_wa"]=val_acc
-            logging.info('---------------evaluate weight averages model on the evaluation set---------------')
-            print("---------------evaluate weight averages model on the evaluation set---------------")
-            stats, _ = validate(rank, n_gpus, audio_model, eval_loader, args, 'wa_eval_set')
-            eval_mAP = np.mean([stat['AP'] for stat in stats])
-            eval_mAUC = np.mean([stat['auc'] for stat in stats])
-            eval_acc = np.mean([stat['acc'] for stat in stats])
-            logging.info("mAP: {:.6f}".format(eval_mAP))
-            logging.info("AUC: {:.6f}".format(eval_mAUC))
-            logging.info("acc: {:.6f}".format(eval_acc))
-            info["mAP/eval_wa"]=eval_mAP
-            info["AUC/eval_wa"]=eval_mAUC
-            info["acc/eval_wa"]=eval_acc
-            np.savetxt(args.exp_dir + '/wa_result.csv', [val_mAP, val_mAUC, val_acc, eval_mAP, eval_mAUC, eval_acc])
+            if(args.wa):
+                # evaluate weight average model
+                sd = torch.load(args.exp_dir + '/models/audio_model_wa.pth', map_location=device)
+                sd = sd["state_dict"] if (isinstance(sd, dict) and "state_dict" in sd.keys()) else sd
+                audio_model.load_state_dict(sd)
+                logging.info('---------------evaluate weight average model on the validation set---------------')
+                print("---------------evaluate weight average model on the validation set---------------")
+                stats, _ = validate(rank, n_gpus, audio_model, val_loader, args, 'wa_valid_set')
+                val_mAP = np.mean([stat['AP'] for stat in stats])
+                val_mAUC = np.mean([stat['auc'] for stat in stats])
+                val_acc = np.mean([stat['acc'] for stat in stats])
+                logging.info("mAP: {:.6f}".format(val_mAP))
+                logging.info("AUC: {:.6f}".format(val_mAUC))
+                logging.info("acc: {:.6f}".format(val_acc))
+                info["mAP/val_wa"]=val_mAP
+                info["AUC/val_wa"]=val_mAUC
+                info["acc/val_wa"]=val_acc
+                logging.info('---------------evaluate weight averages model on the evaluation set---------------')
+                print("---------------evaluate weight averages model on the evaluation set---------------")
+                stats, _ = validate(rank, n_gpus, audio_model, eval_loader, args, 'wa_eval_set')
+                eval_mAP = np.mean([stat['AP'] for stat in stats])
+                eval_mAUC = np.mean([stat['auc'] for stat in stats])
+                eval_acc = np.mean([stat['acc'] for stat in stats])
+                logging.info("mAP: {:.6f}".format(eval_mAP))
+                logging.info("AUC: {:.6f}".format(eval_mAUC))
+                logging.info("acc: {:.6f}".format(eval_acc))
+                info["mAP/eval_wa"]=eval_mAP
+                info["AUC/eval_wa"]=eval_mAUC
+                info["acc/eval_wa"]=eval_acc
+                np.savetxt(args.exp_dir + '/wa_result.csv', [val_mAP, val_mAUC, val_acc, eval_mAP, eval_mAUC, eval_acc])
 
             # evaluate the ensemble results
             logging.info('---------------evaluate ensemble model on the validation set---------------')
