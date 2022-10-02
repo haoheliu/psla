@@ -24,7 +24,6 @@ fairseq
 *.json
 *.png
 *.log
-audioset*
 log*
 *.pkl
 condor*log
