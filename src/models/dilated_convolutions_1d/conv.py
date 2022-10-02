@@ -529,8 +529,8 @@ if __name__ == "__main__":
     from thop import profile
     import torch
 
-    # model = DilatedConv(in_channels=128, dilation_rate=1, input_size=1056, kernel_size=5, stride=1)
-    model = DilatedConvLarge(in_channels=128, dilation_rate=1, input_size=1056, kernel_size=5, stride=1)
+    model = DilatedConv_128(in_channels=128, dilation_rate=1, input_size=1056, kernel_size=5, stride=1)
+    # model = DilatedConvLarge(in_channels=128, dilation_rate=1, input_size=1056, kernel_size=5, stride=1)
     data = torch.randn((3, 128, 1056))
     print(model)
     res = model(data)

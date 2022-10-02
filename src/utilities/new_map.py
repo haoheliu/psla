@@ -284,12 +284,17 @@ def ontology_mean_average_precision(target, clipwise_output, weight):
     for threshold in tqdm(np.linspace(0, int(np.max(weight)), int(np.max(weight))+1)):
         fps_ap=[]
         for i in range(target.shape[1]):
-            fps_weight = ontology_weight[threshold][i]
-            fps_ap.append(
-                _average_precision(
-                    target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=fps_weight
-                )
-            )   
+            try:
+                fps_weight = ontology_weight[threshold][i]
+                fps_ap.append(
+                    _average_precision(
+                        target[:, i], clipwise_output[:, i], tps_weight=None, fps_weight=fps_weight
+                    )
+                )   
+            except:
+                path = "ontology_weight_%s.pkl" % os.getpid()
+                os.remove(path)
+                ontology_weight = build_weight(target, weight)
         ret_fps_ap[threshold] = np.array(fps_ap)
     return ret_fps_ap
 

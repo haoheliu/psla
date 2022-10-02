@@ -164,6 +164,14 @@ def test_model():
     print(flops, params)
     # output should be in shape [10, 527], i.e., 10 samples, each with prediction of 527 classes.
 
+def test_duration():
+    import time
+    start = time.time()
+    model = EffNetAttention(pretrain=True, b=2, head_num=4, sampler=DoNothing, preserve_ratio=0.25) # 2.688G 717.103K
+    print(time.time()-start)
+    print('Total parameter number is : {:.3f} million'.format(sum(p.numel() for p in model.parameters()) / 1e6))
+    model(None)
+
 if __name__ == '__main__':
-    test_model()
+    test_duration()
     

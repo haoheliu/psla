@@ -45,9 +45,9 @@ graph_weight_path=undirected_graph_connectivity_no_root.npy
 
 beta=1.0
 alpha=1.0
-epoch=40
-wa_start=21
-wa_end=40
+epoch=4
+wa_start=1
+wa_end=4
 lrscheduler_start=10
 
 batch_size=8

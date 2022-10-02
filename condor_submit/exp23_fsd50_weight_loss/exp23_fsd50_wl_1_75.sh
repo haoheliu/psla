@@ -9,7 +9,7 @@ LOG="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla/egs&/mnt/fast/nobacku
 PROJECT="/mnt/fast/nobackup/scratch4weeks/hl01486/project/psla&/mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_$IDENTIFIER"
 
 ######################## RUNNING ENTRY ########################
-cd /mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_$IDENTIFIER/egs/audioset
+cd /mnt/fast/nobackup/scratch4weeks/hl01486/project/tmp/psla_$IDENTIFIER/egs/fsd50k
 
 # sh exp18_asb_wl.sh 0.0
 sh exp23_fsd50_reweight.sh 1.75

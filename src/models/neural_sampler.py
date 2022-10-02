@@ -322,6 +322,21 @@ class AdaSTFT(nn.Module):
         weight = weight - need_minus + need_add
         weight = torch.clip(weight, min=0.0, max=1.0) # [66, 1056, 264]
         return weight
+    
+    def calculate_weight_old(self, score, feature, total_length):
+        # Monotonic Expansion
+        cumsum_score = torch.cumsum(score, dim=1)
+        cumsum_weight = cumsum_score.expand(feature.size(0), feature.size(1), total_length)
+        threshold = torch.arange(0, cumsum_weight.size(-1)).to(feature.device).float()
+        smaller_mask = cumsum_weight <= threshold[None, None, ...] + 1
+        greater_mask = cumsum_weight > threshold[None, None, ...]
+        mask = torch.logical_and(smaller_mask, greater_mask)
+
+        # Get the masked weight
+        weight = score.expand(feature.size(0), feature.size(1), total_length)
+        weight = weight * mask
+        weight = torch.clip(weight, min=0.0, max=1.0) # [66, 1056, 264]
+        return weight
 
 class DilatedConv1dMaxPoolCh_LinearSpec(AdaSTFT):
     def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
@@ -611,6 +626,199 @@ class Proposed(AdaSTFT):
         ret['energy'],_=self.score_norm(energy, self.output_seq_length)
         ret['emb'] = mean_pos_enc
         ret['feature'] = torch.cat([mean_feature.unsqueeze(1), max_pool_feature.unsqueeze(1), mean_pos_enc.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=max_pool_feature
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def select_feature_fast(self, feature, score, total_length):
+        weight = self.calculate_weight(score, feature, total_length=total_length)
+
+        # New method
+        mean_feature = torch.matmul(weight.permute(0,2,1), feature)
+        max_pool_feature = self.calculate_scatter_maxpool_odd_even_lines(weight, feature, out_len=self.output_seq_length)
+        mean_pos_enc = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        return mean_feature, max_pool_feature, mean_pos_enc
+
+
+class Proposed_no_max(AdaSTFT):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
+        self.feature_channels=2
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
+
+    def forward(self, x):
+        ret = {}
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(self.denormalize(x).exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        
+        # Normalize the socre value
+        score, _ = self.score_norm(score, self.output_seq_length)
+        mean_feature, max_pool_feature, mean_pos_enc = self.select_feature_fast(self.denormalize(x).exp(), score, total_length=self.output_seq_length)
+        
+        mean_feature = self.normalize(torch.log(mean_feature + EPS))
+        max_pool_feature = None
+        
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        ret['emb'] = mean_pos_enc
+        ret['feature'] = torch.cat([mean_feature.unsqueeze(1),mean_pos_enc.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=max_pool_feature
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def select_feature_fast(self, feature, score, total_length):
+        weight = self.calculate_weight(score, feature, total_length=total_length)
+
+        # New method
+        mean_feature = torch.matmul(weight.permute(0,2,1), feature)
+        mean_pos_enc = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        return mean_feature, None, mean_pos_enc
+    
+class Proposed_no_algo1(AdaSTFT):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
+        self.feature_channels=3
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
+
+    def forward(self, x):
+        ret = {}
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(self.denormalize(x).exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        
+        # Normalize the socre value
+        score, _ = self.score_norm(score, self.output_seq_length)
+        mean_feature, max_pool_feature, mean_pos_enc = self.select_feature_fast(self.denormalize(x).exp(), score, total_length=self.output_seq_length)
+        
+        mean_feature = self.normalize(torch.log(mean_feature + EPS))
+        max_pool_feature = self.normalize(torch.log(max_pool_feature + EPS))
+        
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        ret['emb'] = mean_pos_enc
+        ret['feature'] = torch.cat([mean_feature.unsqueeze(1), max_pool_feature.unsqueeze(1), mean_pos_enc.unsqueeze(1)], dim=1)
+        ret['feature_maxpool']=max_pool_feature
+        ret['score_loss'] = torch.mean(torch.std(score, dim=1))
+        ret['score']=score
+        return ret
+
+    def visualize(self, ret):
+        x, y, emb, score, energy,maxpool = ret['x'], ret['feature'], ret['emb'], ret['score'], ret['energy'],ret['feature_maxpool']
+        y = y[:,0,:,:] # Ignore the positional embedding on drawing the feature
+        import matplotlib.pyplot as plt
+        for i in range(10):
+            if(i >= x.size(0)): break
+            plt.figure(figsize=(6, 8))
+            plt.subplot(611)
+            plt.plot(score[i,:,0].detach().cpu().numpy())
+            plt.subplot(612)
+            plt.plot(energy[i,:,0].detach().cpu().numpy())
+            plt.subplot(613)
+            plt.imshow(x[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(614)
+            plt.imshow(y[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(615)
+            plt.imshow(maxpool[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            plt.subplot(616)
+            plt.imshow(emb[i,...].detach().cpu().numpy().T, aspect="auto", interpolation='none')
+            path = os.path.dirname(logging.getLoggerClass().root.handlers[0].baseFilename)
+            plt.savefig(os.path.join(path, "%s.png" % i))
+            plt.close()
+
+    def select_feature_fast(self, feature, score, total_length):
+        weight = self.calculate_weight_old(score, feature, total_length=total_length)
+
+        # New method
+        mean_feature = torch.matmul(weight.permute(0,2,1), feature)
+        max_pool_feature = self.calculate_scatter_maxpool(score, feature, out_len=self.output_seq_length)
+        mean_pos_enc = torch.matmul(weight.permute(0,2,1), self.pos_emb)
+        
+        return mean_feature, max_pool_feature, mean_pos_enc
+
+
+class Proposed_no_resolution_encoding(AdaSTFT):
+    def __init__(self, input_seq_length, preserve_ratio, alpha=1.0, learn_pos_emb=False, mean=-7.4106, std=6.3097, n_mel_bins=128):
+        super().__init__(input_seq_length, preserve_ratio, alpha, learn_pos_emb, mean, std, n_mel_bins)
+        self.feature_channels=2
+        from models.dilated_convolutions_1d.conv import DilatedConv
+        self.model = DilatedConv(in_channels=self.input_dim, dilation_rate=1, input_size=self.input_seq_length, kernel_size=5, stride=1)
+
+    def forward(self, x):
+        ret = {}
+        # torch.Size([96, 1056, 128])
+        magnitude = torch.sum(self.denormalize(x).exp(), dim=2, keepdim=True)
+        energy = magnitude/torch.max(magnitude)
+        
+        score = torch.sigmoid(self.model(x.permute(0,2,1)).permute(0,2,1))
+        
+        # Normalize the socre value
+        score, _ = self.score_norm(score, self.output_seq_length)
+        mean_feature, max_pool_feature, mean_pos_enc = self.select_feature_fast(self.denormalize(x).exp(), score, total_length=self.output_seq_length)
+        
+        mean_feature = self.normalize(torch.log(mean_feature + EPS))
+        max_pool_feature = self.normalize(torch.log(max_pool_feature + EPS))
+        
+        ret['x']=x
+        ret['energy'],_=self.score_norm(energy, self.output_seq_length)
+        ret['emb'] = mean_pos_enc
+        ret['feature'] = torch.cat([mean_feature.unsqueeze(1), max_pool_feature.unsqueeze(1)], dim=1)
         ret['feature_maxpool']=max_pool_feature
         ret['score_loss'] = torch.mean(torch.std(score, dim=1))
         ret['score']=score
