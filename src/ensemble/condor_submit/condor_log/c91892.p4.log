@@ -1,0 +1,33 @@
+000 (91892.004.000) 2022-10-31 11:31:03 Job submitted from host: <131.227.81.127:9618?addrs=131.227.81.127-9618&alias=aisurrey-condor.surrey.ac.uk&noUDP&sock=schedd_1657_2484>
+...
+040 (91892.004.000) 2022-10-31 11:31:18 Started transferring input files
+	Transferring to host: <131.227.80.182:9618?addrs=131.227.80.182-9618&alias=aisurrey06.surrey.ac.uk&noUDP&sock=slot1_4_36311_225e_156575>
+...
+040 (91892.004.000) 2022-10-31 11:31:18 Finished transferring input files
+...
+001 (91892.004.000) 2022-10-31 11:31:19 Job executing on host: <131.227.80.182:9618?addrs=131.227.80.182-9618&alias=aisurrey06.surrey.ac.uk&noUDP&sock=startd_32191_ed4c>
+...
+006 (91892.004.000) 2022-10-31 11:31:28 Image size of job updated: 125
+	86  -  MemoryUsage of job (MB)
+	88492  -  ResidentSetSize of job (KB)
+...
+006 (91892.004.000) 2022-10-31 11:36:29 Image size of job updated: 3744
+	3744  -  MemoryUsage of job (MB)
+	3834052  -  ResidentSetSize of job (KB)
+...
+006 (91892.004.000) 2022-10-31 11:41:30 Image size of job updated: 3757
+	3757  -  MemoryUsage of job (MB)
+	3847696  -  ResidentSetSize of job (KB)
+...
+006 (91892.004.000) 2022-10-31 11:46:31 Image size of job updated: 3771
+	3771  -  MemoryUsage of job (MB)
+	3862000  -  ResidentSetSize of job (KB)
+...
+006 (91892.004.000) 2022-10-31 11:51:33 Image size of job updated: 3785
+	3785  -  MemoryUsage of job (MB)
+	3876272  -  ResidentSetSize of job (KB)
+...
+006 (91892.004.000) 2022-10-31 11:56:33 Image size of job updated: 3800
+	3800  -  MemoryUsage of job (MB)
+	3891444  -  ResidentSetSize of job (KB)
+...

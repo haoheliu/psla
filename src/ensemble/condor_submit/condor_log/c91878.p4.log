@@ -1,0 +1,41 @@
+000 (91878.004.000) 2022-10-31 10:48:38 Job submitted from host: <131.227.81.127:9618?addrs=131.227.81.127-9618&alias=aisurrey-condor.surrey.ac.uk&noUDP&sock=schedd_1657_2484>
+...
+040 (91878.004.000) 2022-10-31 10:48:56 Started transferring input files
+	Transferring to host: <131.227.80.190:9618?addrs=131.227.80.190-9618&alias=aisurrey10.surrey.ac.uk&noUDP&sock=slot1_47_4601_9214_141426>
+...
+040 (91878.004.000) 2022-10-31 10:48:56 Finished transferring input files
+...
+001 (91878.004.000) 2022-10-31 10:48:57 Job executing on host: <131.227.80.190:9618?addrs=131.227.80.190-9618&alias=aisurrey10.surrey.ac.uk&noUDP&sock=startd_4431_e03c>
+...
+006 (91878.004.000) 2022-10-31 10:49:05 Image size of job updated: 125
+	82  -  MemoryUsage of job (MB)
+	84332  -  ResidentSetSize of job (KB)
+...
+006 (91878.004.000) 2022-10-31 10:54:06 Image size of job updated: 3670
+	3670  -  MemoryUsage of job (MB)
+	3759084  -  ResidentSetSize of job (KB)
+...
+006 (91878.004.000) 2022-10-31 11:09:08 Image size of job updated: 3675
+	3675  -  MemoryUsage of job (MB)
+	3763948  -  ResidentSetSize of job (KB)
+...
+006 (91878.004.000) 2022-10-31 11:14:09 Image size of job updated: 3704
+	3704  -  MemoryUsage of job (MB)
+	3793304  -  ResidentSetSize of job (KB)
+...
+006 (91878.004.000) 2022-10-31 11:19:09 Image size of job updated: 3718
+	3718  -  MemoryUsage of job (MB)
+	3808232  -  ResidentSetSize of job (KB)
+...
+006 (91878.004.000) 2022-10-31 11:24:11 Image size of job updated: 3721
+	3721  -  MemoryUsage of job (MB)
+	3810308  -  ResidentSetSize of job (KB)
+...
+007 (91878.004.000) 2022-10-31 11:25:43 Shadow exception!
+	Error from slot1@aisurrey10.surrey.ac.uk: Docker job has gone over memory limit of 32768 Mb
+	0  -  Run Bytes Sent By Job
+	121432  -  Run Bytes Received By Job
+...
+009 (91878.004.000) 2022-10-31 11:25:43 Job was aborted.
+	via condor_rm (by user hl01486)
+...

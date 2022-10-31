@@ -231,6 +231,15 @@ def train(audio_model, train_loader, test_loader, args):
         # print("d_prime: {:.6f}".format(d_prime(mAUC)))
         np.savetxt(exp_dir + '/wa_result.csv', wa_result)
 
+def all_exists(files):
+    for file in files:
+        if(os.path.exists(file)):
+            continue
+        else:
+            return False
+    return True
+        
+
 def validate(ensemble_model_name, audio_model, val_loader, args, epoch, eval_target=False):  
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     batch_time = AverageMeter()
@@ -250,7 +259,13 @@ def validate(ensemble_model_name, audio_model, val_loader, args, epoch, eval_tar
         for i, (audio_input, labels, fname) in tqdm(enumerate(val_loader)):  
             audio_input = audio_input.to(device)    
             # compute output    
-
+            files_paths = []
+            for f in fname:
+                label_name = os.path.basename(f).replace(".wav",".npy")
+                npy_save_path = os.path.join(save_path, ensemble_model_name, label_name)
+                files_paths.append(npy_save_path)
+            if(all_exists(files_paths)): 
+                continue
             # reference_audio_output = audio_model(audio_input) 
             
             ########################################################
@@ -270,37 +285,36 @@ def validate(ensemble_model_name, audio_model, val_loader, args, epoch, eval_tar
                 npy_save_path = os.path.join(save_path, ensemble_model_name, label_name)
                 np.save(npy_save_path, l.cpu().detach().numpy())
                 
-            audio_output = torch.mean(audio_output,dim=1) # Use the mean value
-            ###########################
+        #     audio_output = torch.mean(audio_output,dim=1) # Use the mean value
+        #     ###########################
             
-            predictions = audio_output.to('cpu').detach()   
-            A_predictions.append(predictions)   
-            A_targets.append(labels)    
-            # compute the loss  
-            labels = labels.to(device)  
-            epsilon = 1e-7  
-            audio_output = torch.clamp(audio_output, epsilon, 1. - epsilon) 
-            if isinstance(args.loss_fn, torch.nn.CrossEntropyLoss): 
-                loss = args.loss_fn(audio_output, torch.argmax(labels.long(), axis=1))  
-            else:   
-                loss = args.loss_fn(audio_output, labels)   
-            A_loss.append(loss.to('cpu').detach())  
-            batch_time.update(time.time() - end)    
-            end = time.time()   
-        audio_output = torch.cat(A_predictions) 
-        target = torch.cat(A_targets)   
-        loss = np.mean(A_loss)  
-        stats = calculate_stats(audio_output, target)   
-        # save the prediction here  
-        exp_dir = args.exp_dir  
-        if os.path.exists(exp_dir+'/predictions') == False: 
-            os.mkdir(exp_dir+'/predictions')    
-            np.savetxt(exp_dir+'/predictions/target.csv', target, delimiter=',')    
-        np.savetxt(exp_dir+'/predictions/predictions_' + str(epoch) + '.csv', audio_output, delimiter=',')  
-        # save the target for the separate eval set if there's one. 
-        if eval_target == True and os.path.exists(exp_dir+'/predictions/eval_target.csv') == False: 
-            np.savetxt(exp_dir + '/predictions/eval_target.csv', target, delimiter=',') 
-    return stats, loss
+        #     predictions = audio_output.to('cpu').detach()   
+        #     A_predictions.append(predictions)   
+        #     A_targets.append(labels)    
+        #     # compute the loss  
+        #     labels = labels.to(device)  
+        #     epsilon = 1e-7  
+        #     audio_output = torch.clamp(audio_output, epsilon, 1. - epsilon) 
+        #     if isinstance(args.loss_fn, torch.nn.CrossEntropyLoss): 
+        #         loss = args.loss_fn(audio_output, torch.argmax(labels.long(), axis=1))  
+        #     else:   
+        #         loss = args.loss_fn(audio_output, labels)   
+        #     A_loss.append(loss.to('cpu').detach())  
+        #     batch_time.update(time.time() - end)    
+        #     end = time.time()   
+        # audio_output = torch.cat(A_predictions) 
+        # target = torch.cat(A_targets)   
+        # loss = np.mean(A_loss)  
+        # stats = calculate_stats(audio_output, target)   
+        # # save the prediction here  
+        # exp_dir = args.exp_dir  
+        # if os.path.exists(exp_dir+'/predictions') == False: 
+        #     os.mkdir(exp_dir+'/predictions')    
+        #     np.savetxt(exp_dir+'/predictions/target.csv', target, delimiter=',')    
+        # np.savetxt(exp_dir+'/predictions/predictions_' + str(epoch) + '.csv', audio_output, delimiter=',')  
+        # # save the target for the separate eval set if there's one. 
+        # if eval_target == True and os.path.exists(exp_dir+'/predictions/eval_target.csv') == False: 
+        #     np.savetxt(exp_dir + '/predictions/eval_target.csv', target, delimiter=',') 
 
 def validate_ensemble(args, epoch):
     exp_dir = args.exp_dir

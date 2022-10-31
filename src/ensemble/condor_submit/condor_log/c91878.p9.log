@@ -1,0 +1,45 @@
+000 (91878.009.000) 2022-10-31 10:48:38 Job submitted from host: <131.227.81.127:9618?addrs=131.227.81.127-9618&alias=aisurrey-condor.surrey.ac.uk&noUDP&sock=schedd_1657_2484>
+...
+040 (91878.009.000) 2022-10-31 10:48:56 Started transferring input files
+	Transferring to host: <131.227.80.184:9618?addrs=131.227.80.184-9618&alias=aisurrey07.surrey.ac.uk&noUDP&sock=slot1_52_59204_52e1_162523>
+...
+040 (91878.009.000) 2022-10-31 10:48:56 Finished transferring input files
+...
+001 (91878.009.000) 2022-10-31 10:48:57 Job executing on host: <131.227.80.184:9618?addrs=131.227.80.184-9618&alias=aisurrey07.surrey.ac.uk&noUDP&sock=startd_53931_c239>
+...
+006 (91878.009.000) 2022-10-31 10:49:05 Image size of job updated: 125
+	87  -  MemoryUsage of job (MB)
+	89756  -  ResidentSetSize of job (KB)
+...
+006 (91878.009.000) 2022-10-31 10:54:05 Image size of job updated: 3693
+	3693  -  MemoryUsage of job (MB)
+	3781696  -  ResidentSetSize of job (KB)
+...
+006 (91878.009.000) 2022-10-31 10:59:05 Image size of job updated: 3739
+	3739  -  MemoryUsage of job (MB)
+	3828924  -  ResidentSetSize of job (KB)
+...
+006 (91878.009.000) 2022-10-31 11:04:06 Image size of job updated: 3779
+	3779  -  MemoryUsage of job (MB)
+	3870192  -  ResidentSetSize of job (KB)
+...
+006 (91878.009.000) 2022-10-31 11:09:06 Image size of job updated: 3780
+	3780  -  MemoryUsage of job (MB)
+	3871024  -  ResidentSetSize of job (KB)
+...
+004 (91878.009.000) 2022-10-31 11:30:26 Job was evicted.
+	(0) CPU times
+		Usr 0 00:00:00, Sys 0 00:00:00  -  Run Remote Usage
+		Usr 0 00:00:00, Sys 0 00:00:00  -  Run Local Usage
+	0  -  Run Bytes Sent By Job
+	121432  -  Run Bytes Received By Job
+	Partitionable Resources :    Usage  Request Allocated Assigned
+	   Cpus                 :     0.00        1         1 
+	   Disk (KB)            :   243         125    426895 
+	   Gpus (Average)       :                 1         1 "GPU-8594b3f5-e573-7b85-89df-dacce0f248d6"
+	   GpusMemory (MB)      :  9415                       
+	   Memory (MB)          :  3780       32768     32768 
+...
+009 (91878.009.000) 2022-10-31 11:30:26 Job was aborted.
+	via condor_rm (by user hl01486)
+...

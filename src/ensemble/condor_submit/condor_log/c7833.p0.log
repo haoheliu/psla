@@ -1,0 +1,53 @@
+000 (7833.000.000) 2022-10-31 01:37:19 Job submitted from host: <131.227.81.67:9618?addrs=131.227.81.67-9618&alias=aisurrey-condor01.surrey.ac.uk&noUDP&sock=schedd_1620029_b968>
+...
+040 (7833.000.000) 2022-10-31 01:37:26 Started transferring input files
+	Transferring to host: <131.227.80.156:9618?addrs=131.227.80.156-9618&alias=aisurrey12.surrey.ac.uk&noUDP&sock=slot1_56_5771_f104_126024>
+...
+040 (7833.000.000) 2022-10-31 01:37:26 Finished transferring input files
+...
+001 (7833.000.000) 2022-10-31 01:37:27 Job executing on host: <131.227.80.156:9618?addrs=131.227.80.156-9618&alias=aisurrey12.surrey.ac.uk&noUDP&sock=startd_5646_43ce>
+...
+006 (7833.000.000) 2022-10-31 01:37:35 Image size of job updated: 415
+	415  -  MemoryUsage of job (MB)
+	425000  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 01:42:35 Image size of job updated: 1563
+	1563  -  MemoryUsage of job (MB)
+	1600704  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 01:47:36 Image size of job updated: 1909
+	1909  -  MemoryUsage of job (MB)
+	1955292  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 01:52:36 Image size of job updated: 2029
+	2029  -  MemoryUsage of job (MB)
+	2077960  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 03:32:46 Image size of job updated: 2622
+	2622  -  MemoryUsage of job (MB)
+	2685780  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 03:37:47 Image size of job updated: 2906
+	2906  -  MemoryUsage of job (MB)
+	2976320  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 03:42:48 Image size of job updated: 3177
+	3177  -  MemoryUsage of job (MB)
+	3253284  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 03:47:49 Image size of job updated: 3237
+	3237  -  MemoryUsage of job (MB)
+	3314824  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 04:12:53 Image size of job updated: 3733
+	3733  -  MemoryUsage of job (MB)
+	3822864  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 04:17:53 Image size of job updated: 4401
+	4401  -  MemoryUsage of job (MB)
+	4506668  -  ResidentSetSize of job (KB)
+...
+006 (7833.000.000) 2022-10-31 04:22:54 Image size of job updated: 4774
+	4774  -  MemoryUsage of job (MB)
+	4889360  -  ResidentSetSize of job (KB)
+...

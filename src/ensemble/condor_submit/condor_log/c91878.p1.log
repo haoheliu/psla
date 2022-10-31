@@ -1,0 +1,45 @@
+000 (91878.001.000) 2022-10-31 10:48:38 Job submitted from host: <131.227.81.127:9618?addrs=131.227.81.127-9618&alias=aisurrey-condor.surrey.ac.uk&noUDP&sock=schedd_1657_2484>
+...
+040 (91878.001.000) 2022-10-31 10:48:55 Started transferring input files
+	Transferring to host: <131.227.80.190:9618?addrs=131.227.80.190-9618&alias=aisurrey10.surrey.ac.uk&noUDP&sock=slot1_43_4601_9214_141424>
+...
+040 (91878.001.000) 2022-10-31 10:48:55 Finished transferring input files
+...
+001 (91878.001.000) 2022-10-31 10:48:56 Job executing on host: <131.227.80.190:9618?addrs=131.227.80.190-9618&alias=aisurrey10.surrey.ac.uk&noUDP&sock=startd_4431_e03c>
+...
+006 (91878.001.000) 2022-10-31 10:49:05 Image size of job updated: 125
+	27  -  MemoryUsage of job (MB)
+	27768  -  ResidentSetSize of job (KB)
+...
+006 (91878.001.000) 2022-10-31 10:54:05 Image size of job updated: 3685
+	3685  -  MemoryUsage of job (MB)
+	3774312  -  ResidentSetSize of job (KB)
+...
+006 (91878.001.000) 2022-10-31 10:59:05 Image size of job updated: 3729
+	3729  -  MemoryUsage of job (MB)
+	3818688  -  ResidentSetSize of job (KB)
+...
+006 (91878.001.000) 2022-10-31 11:04:05 Image size of job updated: 3762
+	3762  -  MemoryUsage of job (MB)
+	3852624  -  ResidentSetSize of job (KB)
+...
+006 (91878.001.000) 2022-10-31 11:09:06 Image size of job updated: 3797
+	3797  -  MemoryUsage of job (MB)
+	3888908  -  ResidentSetSize of job (KB)
+...
+006 (91878.001.000) 2022-10-31 11:14:06 Image size of job updated: 3825
+	3825  -  MemoryUsage of job (MB)
+	3917492  -  ResidentSetSize of job (KB)
+...
+006 (91878.001.000) 2022-10-31 11:19:06 Image size of job updated: 3836
+	3836  -  MemoryUsage of job (MB)
+	3928656  -  ResidentSetSize of job (KB)
+...
+007 (91878.001.000) 2022-10-31 11:24:30 Shadow exception!
+	Error from slot1@aisurrey10.surrey.ac.uk: Docker job has gone over memory limit of 32768 Mb
+	0  -  Run Bytes Sent By Job
+	121432  -  Run Bytes Received By Job
+...
+009 (91878.001.000) 2022-10-31 11:24:30 Job was aborted.
+	via condor_rm (by user hl01486)
+...

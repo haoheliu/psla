@@ -1,0 +1,37 @@
+000 (91876.009.000) 2022-10-31 10:40:28 Job submitted from host: <131.227.81.127:9618?addrs=131.227.81.127-9618&alias=aisurrey-condor.surrey.ac.uk&noUDP&sock=schedd_1657_2484>
+...
+040 (91876.009.000) 2022-10-31 10:40:37 Started transferring input files
+	Transferring to host: <131.227.80.176:9618?addrs=131.227.80.176-9618&alias=aisurrey03.surrey.ac.uk&noUDP&sock=slot1_51_55625_982f_98551>
+...
+040 (91876.009.000) 2022-10-31 10:40:37 Finished transferring input files
+...
+001 (91876.009.000) 2022-10-31 10:40:38 Job executing on host: <131.227.80.176:9618?addrs=131.227.80.176-9618&alias=aisurrey03.surrey.ac.uk&noUDP&sock=startd_55421_c656>
+...
+006 (91876.009.000) 2022-10-31 10:40:46 Image size of job updated: 125
+	52  -  MemoryUsage of job (MB)
+	54028  -  ResidentSetSize of job (KB)
+...
+006 (91876.009.000) 2022-10-31 10:45:47 Image size of job updated: 3690
+	3690  -  MemoryUsage of job (MB)
+	3779372  -  ResidentSetSize of job (KB)
+...
+006 (91876.009.000) 2022-10-31 10:46:01 Image size of job updated: 3692
+	3692  -  MemoryUsage of job (MB)
+	3780940  -  ResidentSetSize of job (KB)
+...
+004 (91876.009.000) 2022-10-31 10:46:01 Job was evicted.
+	(0) CPU times
+		Usr 0 00:03:24, Sys 0 00:04:06  -  Run Remote Usage
+		Usr 0 00:00:00, Sys 0 00:00:00  -  Run Local Usage
+	0  -  Run Bytes Sent By Job
+	121432  -  Run Bytes Received By Job
+	Partitionable Resources :    Usage  Request Allocated Assigned
+	   Cpus                 :        0        1         1 
+	   Disk (KB)            :      162      125    618733 
+	   Gpus (Average)       :                 1         1 "GPU-478cf33c-874d-da2f-366f-43c72b51077c"
+	   GpusMemory (MB)      :     9365                    
+	   Memory (MB)          :     3692    32768     32768 
+...
+009 (91876.009.000) 2022-10-31 10:46:01 Job was aborted.
+	via condor_rm (by user hl01486)
+...

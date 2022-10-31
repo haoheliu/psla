@@ -18,7 +18,7 @@ import numpy as np
 from scipy import stats
 import torch
 
-def get_ensemble_res(mdl_list, base_path, dataset='audioset'):
+def get_ensemble_res(model_name, mdl_list, base_path, dataset='audioset'):
     num_class = 527 if dataset=='audioset' else 200
     # the 0-len(mdl_list) rows record the results of single models, the last row record the result of the ensemble model.
     ensemble_res = np.zeros([len(mdl_list) + 1, 3])
@@ -42,35 +42,35 @@ def get_ensemble_res(mdl_list, base_path, dataset='audioset'):
 
         args.exp_dir = base_path
 
-        stats, _ = validate(str(model_idx), audio_model, eval_loader, args, model_idx)
-        mAP = np.mean([stat['AP'] for stat in stats])
-        mAUC = np.mean([stat['auc'] for stat in stats])
-        dprime = d_prime(mAUC)
-        ensemble_res[model_idx, :] = [mAP, mAUC, dprime]
-        print("Model {:d} {:s} mAP: {:.6f}, AUC: {:.6f}, d-prime: {:.6f}".format(model_idx, mdl, mAP, mAUC, dprime))
+        validate(str(model_name), audio_model, eval_loader, args, model_idx)
+    #     mAP = np.mean([stat['AP'] for stat in stats])
+    #     mAUC = np.mean([stat['auc'] for stat in stats])
+    #     dprime = d_prime(mAUC)
+    #     ensemble_res[model_idx, :] = [mAP, mAUC, dprime]
+    #     print("Model {:d} {:s} mAP: {:.6f}, AUC: {:.6f}, d-prime: {:.6f}".format(model_idx, mdl, mAP, mAUC, dprime))
 
-    # calculate the ensemble result
-    # get the ground truth label
-    target = np.loadtxt(base_path + '/predictions/target.csv', delimiter=',')
-    # get the ground truth label
-    prediction_sample = np.loadtxt(base_path + '/predictions/predictions_0.csv', delimiter=',')
-    # allocate memory space for the ensemble prediction
-    predictions_table = np.zeros([len(mdl_list) , prediction_sample.shape[0], prediction_sample.shape[1]])
-    for model_idx in range(0, len(mdl_list)):
-        predictions_table[model_idx, :, :] = np.loadtxt(base_path + '/predictions/predictions_' + str(model_idx) + '.csv', delimiter=',')
-        model_idx += 1
+    # # calculate the ensemble result
+    # # get the ground truth label
+    # target = np.loadtxt(base_path + '/predictions/target.csv', delimiter=',')
+    # # get the ground truth label
+    # prediction_sample = np.loadtxt(base_path + '/predictions/predictions_0.csv', delimiter=',')
+    # # allocate memory space for the ensemble prediction
+    # predictions_table = np.zeros([len(mdl_list) , prediction_sample.shape[0], prediction_sample.shape[1]])
+    # for model_idx in range(0, len(mdl_list)):
+    #     predictions_table[model_idx, :, :] = np.loadtxt(base_path + '/predictions/predictions_' + str(model_idx) + '.csv', delimiter=',')
+    #     model_idx += 1
 
-    ensemble_predictions = np.mean(predictions_table, axis=0)
-    stats = calculate_stats(ensemble_predictions, target)
-    ensemble_mAP = np.mean([stat['AP'] for stat in stats])
-    ensemble_mAUC = np.mean([stat['auc'] for stat in stats])
-    ensemble_dprime = d_prime(ensemble_mAUC)
-    ensemble_res[-1, :] = [ensemble_mAP, ensemble_mAUC, ensemble_dprime]
-    print('---------------Ensemble Result Summary---------------')
-    for model_idx in range(len(mdl_list)):
-        print("Model {:d} {:s} mAP: {:.6f}, AUC: {:.6f}, d-prime: {:.6f}".format(model_idx, mdl_list[model_idx], ensemble_res[model_idx, 0], ensemble_res[model_idx, 1], ensemble_res[model_idx, 2]))
-    print("Ensemble {:d} Models mAP: {:.6f}, AUC: {:.6f}, d-prime: {:.6f}".format(len(mdl_list), ensemble_mAP, ensemble_mAUC, ensemble_dprime))
-    np.savetxt(base_path + '/ensemble_result.csv', ensemble_res, delimiter=',')
+    # ensemble_predictions = np.mean(predictions_table, axis=0)
+    # stats = calculate_stats(ensemble_predictions, target)
+    # ensemble_mAP = np.mean([stat['AP'] for stat in stats])
+    # ensemble_mAUC = np.mean([stat['auc'] for stat in stats])
+    # ensemble_dprime = d_prime(ensemble_mAUC)
+    # ensemble_res[-1, :] = [ensemble_mAP, ensemble_mAUC, ensemble_dprime]
+    # print('---------------Ensemble Result Summary---------------')
+    # for model_idx in range(len(mdl_list)):
+    #     print("Model {:d} {:s} mAP: {:.6f}, AUC: {:.6f}, d-prime: {:.6f}".format(model_idx, mdl_list[model_idx], ensemble_res[model_idx, 0], ensemble_res[model_idx, 1], ensemble_res[model_idx, 2]))
+    # print("Ensemble {:d} Models mAP: {:.6f}, AUC: {:.6f}, d-prime: {:.6f}".format(len(mdl_list), ensemble_mAP, ensemble_mAUC, ensemble_dprime))
+    # np.savetxt(base_path + '/ensemble_result.csv', ensemble_res, delimiter=',')
 
 def d_prime(auc):
     standard_normal = stats.norm()
@@ -79,12 +79,13 @@ def d_prime(auc):
 
 # dataloader settings
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('-n', "--num", default=0, type=int)
 args = parser.parse_args()
 
 dataset = 'audioset'
 args.dataset = dataset
 
-args.data_eval = '/mnt/fast/nobackup/users/hl01486/metadata/audioset/datafiles/audioset_eval_data.json'
+args.data_eval = '/mnt/fast/nobackup/users/hl01486/metadata/audioset/datafiles/audioset_bal_unbal_train_data.json'
 args.label_csv='/mnt/fast/nobackup/users/hl01486/metadata/audioset/class_labels_indices.csv'
 
 args.loss_fn = torch.nn.BCELoss()
@@ -104,8 +105,8 @@ eval_loader = torch.utils.data.DataLoader(
 # mdl_list_5 = ['../../pretrained_models/audioset/as_mdl_'+str(i)+'.pth' for i in range(5)]
 
 # ensemble entire 10 audioset models, mAP =
-mdl_list_10 = ['../../pretrained_models/audioset/as_mdl_'+str(i)+'.pth' for i in range(10)]
+mdl_list_10 = ['../../pretrained_models/audioset/as_mdl_'+str(args.num)+'.pth']
 
 # get_ensemble_res(mdl_list_3, './ensemble_as', dataset)
 # get_ensemble_res(mdl_list_5, './ensemble_as', dataset)
-get_ensemble_res(mdl_list_10, './ensemble_as', dataset)
+get_ensemble_res("as_"+str(args.num), mdl_list_10, './ensemble_as', dataset)

@@ -1,0 +1,45 @@
+000 (91878.007.000) 2022-10-31 10:48:38 Job submitted from host: <131.227.81.127:9618?addrs=131.227.81.127-9618&alias=aisurrey-condor.surrey.ac.uk&noUDP&sock=schedd_1657_2484>
+...
+040 (91878.007.000) 2022-10-31 10:48:56 Started transferring input files
+	Transferring to host: <131.227.80.188:9618?addrs=131.227.80.188-9618&alias=aisurrey09.surrey.ac.uk&noUDP&sock=slot1_22_5793_7145_97320>
+...
+040 (91878.007.000) 2022-10-31 10:48:56 Finished transferring input files
+...
+001 (91878.007.000) 2022-10-31 10:48:57 Job executing on host: <131.227.80.188:9618?addrs=131.227.80.188-9618&alias=aisurrey09.surrey.ac.uk&noUDP&sock=startd_5586_1c1f>
+...
+006 (91878.007.000) 2022-10-31 10:49:05 Image size of job updated: 125
+	77  -  MemoryUsage of job (MB)
+	79364  -  ResidentSetSize of job (KB)
+...
+006 (91878.007.000) 2022-10-31 10:54:05 Image size of job updated: 3693
+	3693  -  MemoryUsage of job (MB)
+	3782444  -  ResidentSetSize of job (KB)
+...
+006 (91878.007.000) 2022-10-31 10:59:05 Image size of job updated: 3743
+	3743  -  MemoryUsage of job (MB)
+	3833368  -  ResidentSetSize of job (KB)
+...
+006 (91878.007.000) 2022-10-31 11:04:06 Image size of job updated: 3785
+	3785  -  MemoryUsage of job (MB)
+	3876092  -  ResidentSetSize of job (KB)
+...
+006 (91878.007.000) 2022-10-31 11:09:06 Image size of job updated: 3829
+	3829  -  MemoryUsage of job (MB)
+	3921304  -  ResidentSetSize of job (KB)
+...
+006 (91878.007.000) 2022-10-31 11:14:07 Image size of job updated: 3861
+	3861  -  MemoryUsage of job (MB)
+	3953864  -  ResidentSetSize of job (KB)
+...
+007 (91878.007.000) 2022-10-31 11:15:49 Shadow exception!
+	Error from slot1@aisurrey09.surrey.ac.uk: Docker job has gone over memory limit of 32768 Mb
+	0  -  Run Bytes Sent By Job
+	121432  -  Run Bytes Received By Job
+...
+012 (91878.007.000) 2022-10-31 11:15:49 Job was held.
+	Error from slot1@aisurrey09.surrey.ac.uk: Docker job has gone over memory limit of 32768 Mb
+	Code 34 Subcode 0
+...
+009 (91878.007.000) 2022-10-31 11:20:15 Job was aborted.
+	via condor_rm (by user hl01486)
+...
