@@ -42,7 +42,7 @@ def get_ensemble_res(mdl_list, base_path, dataset='audioset'):
 
         args.exp_dir = base_path
 
-        stats, _ = validate(audio_model, eval_loader, args, model_idx)
+        stats, _ = validate(str(model_idx), audio_model, eval_loader, args, model_idx)
         mAP = np.mean([stat['AP'] for stat in stats])
         mAUC = np.mean([stat['auc'] for stat in stats])
         dprime = d_prime(mAUC)
@@ -82,38 +82,30 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 args = parser.parse_args()
 
 dataset = 'audioset'
-# uncomment this line if you want test ensemble on fsd50k
-# dataset = 'fsd50k'
-
 args.dataset = dataset
-if dataset == 'audioset':
-    args.data_eval = '../../egs/audioset/datafiles/eval_data.json'
-else:
-    args.data_eval = '../../egs/fsd50k/datafiles/fsd50k_eval_full.json'
-args.label_csv='../../egs/' + dataset + '/class_labels_indices.csv'
+
+args.data_eval = '/mnt/fast/nobackup/users/hl01486/metadata/audioset/datafiles/audioset_eval_data.json'
+args.label_csv='/mnt/fast/nobackup/users/hl01486/metadata/audioset/class_labels_indices.csv'
+
 args.loss_fn = torch.nn.BCELoss()
 norm_stats = {'audioset': [-4.6476, 4.5699], 'fsd50k': [-4.6476, 4.5699]}
 target_length = {'audioset': 1056, 'fsd50k': 3000}
-batch_size = 200 if dataset=='audioset' else 48
+batch_size = 16 if dataset=='audioset' else 48
 
 val_audio_conf = {'num_mel_bins': 128, 'target_length': target_length[args.dataset], 'freqm': 0, 'timem': 0, 'mixup': 0, 'dataset': args.dataset, 'mode':'evaluation', 'mean':norm_stats[args.dataset][0], 'std':norm_stats[args.dataset][1], 'noise': False}
 eval_loader = torch.utils.data.DataLoader(
     dataloaders.AudiosetDataset(args.data_eval, label_csv=args.label_csv, audio_conf=val_audio_conf),
-    batch_size=batch_size, shuffle=False, num_workers=16, pin_memory=True)
+    batch_size=batch_size, shuffle=False, num_workers=8, pin_memory=True)
 
-if dataset == 'audioset':
-    # ensemble 3 audioset models trained with exactly same setting, but different random seeds
-    mdl_list_3 = ['../../pretrained_models/audioset/as_mdl_'+str(i)+'.pth' for i in range(3)]
+# # ensemble 3 audioset models trained with exactly same setting, but different random seeds
+# mdl_list_3 = ['../../pretrained_models/audioset/as_mdl_'+str(i)+'.pth' for i in range(3)]
 
-    # ensemble top 5 audioset models, mAP =
-    mdl_list_5 = ['../../pretrained_models/audioset/as_mdl_'+str(i)+'.pth' for i in range(5)]
+# # ensemble top 5 audioset models, mAP =
+# mdl_list_5 = ['../../pretrained_models/audioset/as_mdl_'+str(i)+'.pth' for i in range(5)]
 
-    # ensemble entire 10 audioset models, mAP =
-    mdl_list_10 = ['../../pretrained_models/audioset/as_mdl_'+str(i)+'.pth' for i in range(10)]
+# ensemble entire 10 audioset models, mAP =
+mdl_list_10 = ['../../pretrained_models/audioset/as_mdl_'+str(i)+'.pth' for i in range(10)]
 
-    get_ensemble_res(mdl_list_3, './ensemble_as', dataset)
-    get_ensemble_res(mdl_list_5, './ensemble_as', dataset)
-    get_ensemble_res(mdl_list_10, './ensemble_as', dataset)
-
-else:
-    pass
+# get_ensemble_res(mdl_list_3, './ensemble_as', dataset)
+# get_ensemble_res(mdl_list_5, './ensemble_as', dataset)
+get_ensemble_res(mdl_list_10, './ensemble_as', dataset)

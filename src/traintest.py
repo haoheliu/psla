@@ -5,6 +5,7 @@
 # @Email   : yuangong@mit.edu
 # @File    : traintest.py
 
+from cProfile import label
 import sys
 import os
 import datetime
@@ -16,6 +17,7 @@ from torch import nn
 import numpy as np
 import pickle
 from torch.cuda.amp import autocast,GradScaler
+from tqdm import tqdm
 
 def train(audio_model, train_loader, test_loader, args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -229,7 +231,7 @@ def train(audio_model, train_loader, test_loader, args):
         # print("d_prime: {:.6f}".format(d_prime(mAUC)))
         np.savetxt(exp_dir + '/wa_result.csv', wa_result)
 
-def validate(audio_model, val_loader, args, epoch, eval_target=False):  
+def validate(ensemble_model_name, audio_model, val_loader, args, epoch, eval_target=False):  
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     batch_time = AverageMeter()
     if not isinstance(audio_model, nn.DataParallel):    
@@ -241,11 +243,36 @@ def validate(audio_model, val_loader, args, epoch, eval_target=False):
     A_predictions = []  
     A_targets = []  
     A_loss = [] 
+    save_path = "/mnt/fast/nobackup/scratch4weeks/hl01486/datasets/audioset_segment_labels_ensemble"
+    os.makedirs(os.path.join(save_path, ensemble_model_name), exist_ok=True)
+    print("start validation")
     with torch.no_grad():   
-        for i, (audio_input, labels) in enumerate(val_loader):  
+        for i, (audio_input, labels, fname) in tqdm(enumerate(val_loader)):  
             audio_input = audio_input.to(device)    
             # compute output    
-            audio_output = audio_model(audio_input) 
+
+            # reference_audio_output = audio_model(audio_input) 
+            
+            ########################################################
+            window_length = 150
+            window_shift = 20
+            audio_input = torch.nn.functional.pad(audio_input, (0,0,window_length//2,window_length//2),"constant",torch.min(audio_input))
+            bs, t_steps, melbins = audio_input.size()
+            
+            audio_input_unfold = audio_input.unfold(1, window_length, window_shift)
+            new_dim_size = audio_input_unfold.size(1)
+            batched = audio_input_unfold.reshape(-1, melbins, window_length) # TODO here # batched.reshape(bs, new_dim_size, melbins, window_length) # equal audio_input
+            audio_output = audio_model(batched.permute(0,2,1)) 
+            audio_output = audio_output.reshape(bs, new_dim_size, 527) # The new_dim_size indicates the temporal dimension 
+            if(i<1): print(audio_output.size())
+            for l,f in zip(audio_output, fname):
+                label_name = os.path.basename(f).replace(".wav",".npy")
+                npy_save_path = os.path.join(save_path, ensemble_model_name, label_name)
+                np.save(npy_save_path, l.cpu().detach().numpy())
+                
+            audio_output = torch.mean(audio_output,dim=1) # Use the mean value
+            ###########################
+            
             predictions = audio_output.to('cpu').detach()   
             A_predictions.append(predictions)   
             A_targets.append(labels)    
